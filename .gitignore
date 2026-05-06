@@ -1,0 +1,14 @@
+rag_db/
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.json.bak
+prisma_state.json
+raw_*.json
+screening_prisma.json
+eligibility_prisma.json
+extraction_table.json
+report_finale.md
+preprint_bozza.md
+protocollo_ricerca.md
