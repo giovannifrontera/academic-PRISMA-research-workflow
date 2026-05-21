@@ -141,4 +141,4 @@ The skill instructions are written in **Italian**, targeting Italian academic re
 
 ## License
 
-MIT
+AGPL-3.0 — requires anyone who distributes or runs the software as a service to share the source code.
