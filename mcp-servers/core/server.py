@@ -21,7 +21,10 @@ API_KEY = os.environ.get("CORE_API_KEY", "")
 
 
 def _headers() -> dict:
-    h = {"Content-Type": "application/json"}
+    h = {
+        "Content-Type": "application/json",
+        "User-Agent": "academic-prisma-workflow/1.0 (research use)",
+    }
     if API_KEY:
         h["Authorization"] = f"Bearer {API_KEY}"
     return h
