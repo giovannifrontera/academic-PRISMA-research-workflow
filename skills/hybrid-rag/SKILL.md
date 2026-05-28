@@ -19,8 +19,11 @@ Il DB è **per-progetto**: vive in `rag_db/` nella cartella di lavoro corrente.
 ## Setup iniziale (prima volta per ogni progetto)
 
 1. Verifica se `hybrid_rag.py` esiste nella cartella di lavoro corrente.
-2. Se non esiste → usare il tool **Read** su `~/.claude/skills/hybrid-rag/hybrid_rag_template.py`, poi il tool **Write** per creare `./hybrid_rag.py` con lo stesso contenuto.
+2. Se non esiste → usare il tool **Read** su `~/.claude/skills/hybrid-rag/hybrid_rag_template.py`, poi il tool **Write** per creare `./hybrid_rag.py` con lo stesso contenuto. Questo è il passaggio che genera lo script nella cartella del progetto — l'utente non può eseguirlo prima di questo momento.
 3. Esegui: `py hybrid_rag.py init`
+   - Installa automaticamente le dipendenze Python: `sentence-transformers`, `rank-bm25`, `pymupdf`, `chromadb` (o `qdrant-client` se backend Qdrant).
+   - Crea la cartella `rag_db/` nella directory di lavoro corrente.
+   - Il DB è locale al progetto: ogni review ha il suo.
 
 **Il DB è idempotente:** `init` e `index-prisma` usano `upsert` — è sempre sicuro rieseguirli. Per svuotare il DB da zero: `rm -rf rag_db/` poi `py hybrid_rag.py init`.
 

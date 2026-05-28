@@ -71,6 +71,8 @@ Eight academic database servers give Claude direct search access during the PRIS
 - Python 3.10+
 - [Pandoc](https://pandoc.org/installing.html) (for Word export only)
 
+> **RAG dependencies** (`sentence-transformers`, `rank-bm25`, `pymupdf`, `chromadb`) are installed automatically the first time you run `hybrid-rag`. You do not need to install them manually.
+
 ### 1. Install the skills
 
 **Linux / macOS**
@@ -137,9 +139,21 @@ claude mcp list
 
 ---
 
+## How the RAG system works
+
+The `hybrid-rag` skill uses a **generated script** pattern rather than a pre-installed package:
+
+1. The first time you invoke `hybrid-rag`, Claude writes `hybrid_rag.py` into your project folder by copying it from the installed skill template.
+2. You then run `py hybrid_rag.py init`, which installs the required Python packages and creates a `rag_db/` directory in your project folder.
+3. Subsequent commands (`index-prisma`, `query`, etc.) operate on that local database.
+
+The `rag_db/` directory is **local to each project** — it is never committed to version control and does not exist until you run `init`. Each research project gets its own database built from its own PRISMA results.
+
+---
+
 ## Usage
 
-Start any skill by describing your task in Claude Code, or invoke one directly:
+Start any skill by describing your task in Claude Code:
 
 ```
 Start a PRISMA systematic review on chatbot use in secondary education
