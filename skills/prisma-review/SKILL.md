@@ -1,6 +1,6 @@
 ---
 name: prisma-review
-description: Use when conducting a systematic literature review using the PRISMA methodology. Triggers on: systematic review, literature review, PRISMA, database search strategy, inclusion/exclusion criteria, deduplication, screening, evidence synthesis. Available MCP servers: semantic-scholar, arxiv, pubmed, eric, ricerca-italia (OpenAIRE — Italian/European repositories).
+description: Use when conducting a systematic literature review using the PRISMA methodology. Triggers on: systematic review, literature review, PRISMA, database search strategy, inclusion/exclusion criteria, deduplication, screening, evidence synthesis. Available MCP servers: semantic-scholar, arxiv, pubmed, eric, openaire, core, doaj, zenodo.
 ---
 
 # PRISMA Systematic Review
@@ -200,8 +200,9 @@ Se la domanda è ampia, aiuta l'utente a scomporla in **sub-domande** (es. RQ1, 
 | Educazione / pedagogia | ERIC, Semantic Scholar, OpenAIRE |
 | Psicologia / neuroscienze | PubMed, Semantic Scholar |
 | AI / informatica / ed-tech | arXiv, Semantic Scholar |
-| Fonti italiane / europee | OpenAIRE (`ricerca-italia`) |
-| Interdisciplinare | tutti e 5 |
+| Fonti italiane / europee | `openaire` (IT filter), `core`, `doaj` |
+| Preprint e dataset | `zenodo`, `arxiv` |
+| Interdisciplinare | tutti |
 
 ### 0.4 — Tipo di pubblicazione
 > "Vuoi includere solo articoli peer-reviewed, o anche preprint, report, tesi?"
@@ -236,13 +237,16 @@ Chiedi conferma. Poi aggiorna `prisma_state.json` e `prisma_log.md`.
 
 Costruisci le query adattando i parametri. Lancia le ricerche in parallelo.
 
-| Database | Tool MCP | Parametri |
-|----------|----------|--------------------|
+| Database | Tool MCP | Parametri chiave |
+|----------|----------|-----------------|
 | `semantic-scholar` | `paper_relevance_search` | `year="AAAA-AAAA"`, `min_citation_count=N`, `fields_of_study=[...]` |
 | `arxiv` | `search_papers` | `date_from="AAAA-MM-GG"`, `categories=[...]` |
 | `pubmed` | `search_pubmed` | `"AAAA:AAAA"[Date - Publication]`, `[MeSH Terms]` |
-| `eric` | `eric_advanced_search` | `query`, `rows` (max 200), `start` (paginazione), `year_from`, `year_to`, `education_level`, `pub_type`, `language`, `title_only` |
-| `ricerca-italia` | `openaire_search_italy` | `query`, `year_from`, `year_to` |
+| `eric` | `eric_advanced_search` | `query`, `rows` (max 200), `start`, `year_from`, `year_to`, `education_level`, `pub_type`, `language`, `title_only` |
+| `openaire` | `openaire_search` | `query`, `year_from`, `year_to`, `country="IT"` per fonti italiane |
+| `core` | `core_search` | `query`, `year_from`, `year_to`, `language="it"` — richiede `CORE_API_KEY` (free) |
+| `doaj` | `doaj_search_articles` | `query`, `year_from`, `year_to`, `country_publisher="IT"` per riviste italiane |
+| `zenodo` | `zenodo_search` | `query`, `year_from`, `year_to`, `resource_type="publication"` |
 
 ### ⚠️ MCP server non disponibile — gestione errori
 
@@ -311,7 +315,10 @@ semantic-scholar | [query]                  | N
 arxiv            | [query]                  | N
 pubmed           | [query]                  | N
 eric             | [query]                  | N
-ricerca-italia   | [query] [IT]             | N
+openaire         | [query] [country=IT]     | N
+core             | [query]                  | N
+doaj             | [query] [IT]             | N
+zenodo           | [query]                  | N
 ────────────────────────────────────────────────────────────
 TOTALE LORDO                                | N
 ```
@@ -325,7 +332,10 @@ raw_semantic_scholar.json   ← lista di oggetti dal MCP semantic-scholar
 raw_arxiv.json              ← lista di oggetti dal MCP arxiv
 raw_pubmed.json             ← lista di oggetti dal MCP pubmed
 raw_eric.json               ← lista di oggetti dal MCP eric
-raw_openaire.json           ← lista di oggetti dal MCP ricerca-italia
+raw_openaire.json           ← lista di oggetti dal MCP openaire
+raw_core.json               ← lista di oggetti dal MCP core
+raw_doaj.json               ← lista di oggetti dal MCP doaj
+raw_zenodo.json             ← lista di oggetti dal MCP zenodo
 ```
 
 **Perché è critico:** Lo script di deduplicazione in Fase 2 legge questi file. Se non esistono, la Fase 2 non può partire e il corpus andrà perso al termine della sessione.
@@ -356,8 +366,11 @@ Scrivi `prisma_screening.py` nella cartella di lavoro. Lo script deve:
    - **Semantic Scholar**: `title`, `externalIds.DOI`, `year`, `abstract`, `authors[].name`
    - **arXiv**: `title`, `doi` (fallback: `id`), `published[:4]`, `summary`, `authors[].name`
    - **PubMed**: `Title`, `DOI`, `PubDate`, `Abstract`, `Authors[].name`
-   - **ERIC** (API diretta): `title`, `doi` (o `id` come fallback), `pubyear`, `description` (abstract), `author[]`, `subject[]`, `source` (rivista)
+   - **ERIC**: `title`, `doi` (o `id` come fallback), `pubyear`, `description` (abstract), `author[]`, `subject[]`, `source` (rivista)
    - **OpenAIRE**: `title`, `doi`, `year`, `abstract`, `authors[]`
+   - **CORE**: `title`, `doi`, `yearPublished`, `abstract`, `authors[].name`, `journals[0].title`
+   - **DOAJ**: `bibjson.title`, `bibjson.identifier[doi]`, `bibjson.year`, `bibjson.abstract`, `bibjson.author[].name`
+   - **Zenodo**: `metadata.title`, `metadata.doi`, `metadata.publication_date[:4]`, `metadata.description`, `metadata.creators[].name`
 2. Normalizzare verso: `title`, `doi`, `year`, `abstract`, `authors`, `source_db`.
 3. Deduplicare per DOI (lowercase) e poi per titolo normalizzato (alfanumerico, lowercase).
 4. Applicare i filtri concordati (anno, lingua, tipo pub.).

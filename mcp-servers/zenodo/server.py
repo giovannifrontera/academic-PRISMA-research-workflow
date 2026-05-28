@@ -1,0 +1,201 @@
+"""
+Zenodo MCP Server
+Searches Zenodo (zenodo.org) — CERN's open research repository.
+Covers preprints, datasets, software, and publications from
+Italian researchers and European projects (Horizon funding).
+API docs: https://developers.zenodo.org/
+No API key required for public records.
+"""
+
+import json
+import urllib.request
+import urllib.parse
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("zenodo")
+
+BASE_URL = "https://zenodo.org/api"
+DEFAULT_TIMEOUT = 30
+
+
+def _get(params: dict) -> dict:
+    url = f"{BASE_URL}/records?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT) as resp:
+        return json.loads(resp.read().decode())
+
+
+def _parse(hit: dict) -> dict:
+    meta = hit.get("metadata", {})
+    title = meta.get("title", "")
+    resource_type = meta.get("resource_type", {}).get("type", "") if isinstance(meta.get("resource_type"), dict) else ""
+    pub_date = meta.get("publication_date", "")[:4]
+    creators = meta.get("creators", [])
+    authors = [c.get("name", "") for c in creators if isinstance(c, dict)]
+    description = meta.get("description", "") or ""
+    # Strip basic HTML tags from description
+    import re
+    description = re.sub(r"<[^>]+>", "", description)
+    doi = meta.get("doi", "") or hit.get("doi", "")
+    zenodo_id = hit.get("id", "")
+    keywords = meta.get("keywords", []) or []
+    journal = ""
+    journal_info = meta.get("journal", {})
+    if isinstance(journal_info, dict):
+        journal = journal_info.get("title", "")
+    communities = [c.get("id", "") for c in meta.get("communities", []) if isinstance(c, dict)]
+    return {
+        "title": title, "resource_type": resource_type, "year": pub_date,
+        "authors": authors, "abstract": description, "doi": doi,
+        "zenodo_id": zenodo_id, "keywords": keywords, "journal": journal,
+        "communities": communities,
+    }
+
+
+def _format(hits: list, label: str, total: int) -> str:
+    if not hits:
+        return f"Zenodo — nessun risultato per: {label}"
+    lines = [f"Zenodo — {total} risultati per '{label}' (mostro {len(hits)}):\n"]
+    for i, hit in enumerate(hits, 1):
+        rec = _parse(hit)
+        auth = ", ".join(rec["authors"][:3]) + (" et al." if len(rec["authors"]) > 3 else "")
+        rtype = f" [{rec['resource_type']}]" if rec["resource_type"] else ""
+        line = f"{i}. **{rec['title'] or '(senza titolo)'}**{rtype}\n"
+        line += f"   {auth or 'N/D'} ({rec['year'] or 'n.d.'})\n"
+        if rec["journal"]:
+            line += f"   Rivista: {rec['journal']}\n"
+        if rec["doi"]:
+            line += f"   DOI: {rec['doi']}\n"
+        if rec["zenodo_id"]:
+            line += f"   Zenodo: https://zenodo.org/records/{rec['zenodo_id']}\n"
+        if rec["keywords"]:
+            line += f"   Keywords: {', '.join(rec['keywords'][:6])}\n"
+        if rec["abstract"]:
+            line += f"   Abstract: {rec['abstract'][:300]}{'...' if len(rec['abstract']) > 300 else ''}\n"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def zenodo_search(
+    query: str,
+    year_from: int = None,
+    year_to: int = None,
+    resource_type: str = None,
+    community: str = None,
+    rows: int = 10,
+    page: int = 1,
+) -> str:
+    """
+    Search Zenodo for open research outputs (preprints, articles, datasets, software).
+    Particularly useful for finding Italian Horizon Europe project outputs
+    and preprints before formal journal publication.
+
+    Args:
+        query: Search terms (e.g. "machine learning education Italy")
+        year_from: Start year (e.g. 2015)
+        year_to: End year (e.g. 2025)
+        resource_type: Filter by type: "publication", "dataset", "software",
+                       "presentation", "poster" (default: all)
+        community: Zenodo community ID to search within (e.g. "eu" for EU projects)
+        rows: Results per page (default 10, max 100)
+        page: Page number (default 1)
+    """
+    q = query
+    if year_from and year_to:
+        q += f" AND publication_date:[{year_from}-01-01 TO {year_to}-12-31]"
+    elif year_from:
+        q += f" AND publication_date:[{year_from}-01-01 TO *]"
+    elif year_to:
+        q += f" AND publication_date:[* TO {year_to}-12-31]"
+    if resource_type:
+        q += f" AND resource_type.type:{resource_type}"
+    if community:
+        q += f" AND communities:{community}"
+
+    params = {"q": q, "size": rows, "page": page, "sort": "bestmatch", "access_right": "open"}
+    data = _get(params)
+    hits = data.get("hits", {}).get("hits", [])
+    total = data.get("hits", {}).get("total", 0)
+    return _format(hits, query, total)
+
+
+@mcp.tool()
+def zenodo_count(
+    query: str,
+    year_from: int = None,
+    year_to: int = None,
+    resource_type: str = None,
+) -> str:
+    """
+    Return total result count from Zenodo without downloading records.
+    Use at PRISMA Phase 1 to estimate volume.
+
+    Args:
+        query: Search terms
+        year_from: Start year
+        year_to: End year
+        resource_type: "publication", "dataset", "software", etc.
+    """
+    q = query
+    if year_from and year_to:
+        q += f" AND publication_date:[{year_from}-01-01 TO {year_to}-12-31]"
+    elif year_from:
+        q += f" AND publication_date:[{year_from}-01-01 TO *]"
+    elif year_to:
+        q += f" AND publication_date:[* TO {year_to}-12-31]"
+    if resource_type:
+        q += f" AND resource_type.type:{resource_type}"
+
+    params = {"q": q, "size": 1, "page": 1, "access_right": "open"}
+    data = _get(params)
+    total = data.get("hits", {}).get("total", 0)
+    parts = [f"Zenodo — risultati per '{query}'"]
+    if resource_type:
+        parts.append(f"[{resource_type}]")
+    if year_from or year_to:
+        parts.append(f"[{year_from or ''}-{year_to or ''}]")
+    return " ".join(parts) + f": **{total}**"
+
+
+@mcp.tool()
+def zenodo_get(record_id: str) -> str:
+    """
+    Retrieve full metadata for a specific Zenodo record.
+    Use to get download links, license, and full author affiliations
+    for a paper identified during screening.
+
+    Args:
+        record_id: Zenodo record ID (numeric, from zenodo_search results)
+    """
+    url = f"{BASE_URL}/records/{record_id}"
+    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT) as resp:
+        r = json.loads(resp.read().decode())
+
+    rec = _parse(r)
+    files = r.get("files", []) or []
+    file_links = [f.get("links", {}).get("self", "") for f in files if isinstance(f, dict)]
+    license_info = r.get("metadata", {}).get("license", {})
+    license_id = license_info.get("id", "") if isinstance(license_info, dict) else ""
+
+    lines = [
+        f"**{rec['title'] or 'N/D'}**",
+        f"Tipo: {rec['resource_type'] or 'N/D'}",
+        f"Autori: {', '.join(rec['authors']) or 'N/D'}",
+        f"Anno: {rec['year'] or 'n.d.'}",
+        f"DOI: {rec['doi'] or 'N/D'}",
+        f"Licenza: {license_id or 'N/D'}",
+        f"Zenodo: https://zenodo.org/records/{rec['zenodo_id']}",
+    ]
+    if rec["keywords"]:
+        lines.append(f"Keywords: {', '.join(rec['keywords'])}")
+    if file_links:
+        lines.append(f"File: {file_links[0]}")
+    if rec["abstract"]:
+        lines.append(f"\nAbstract:\n{rec['abstract']}")
+    return "\n".join(lines)
+
+
+if __name__ == "__main__":
+    mcp.run(transport="stdio")
