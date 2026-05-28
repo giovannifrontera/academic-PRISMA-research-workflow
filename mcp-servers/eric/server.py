@@ -7,12 +7,13 @@ API uses Apache Solr syntax for field-specific queries.
 import json
 import urllib.request
 import urllib.parse
+import urllib.error
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("eric")
 
 ERIC_API = "https://api.ies.ed.gov/eric/"
-DEFAULT_TIMEOUT = 30  # increased from 15s
+DEFAULT_TIMEOUT = 30
 
 
 def _build_solr_query(
@@ -24,42 +25,22 @@ def _build_solr_query(
     language: str = None,
     title_only: bool = False,
 ) -> str:
-    """Build a Solr query string combining free-text and field filters."""
     parts = []
-
-    # Main query — optionally restricted to title field
     if query:
-        if title_only:
-            parts.append(f'title:({query})')
-        else:
-            parts.append(f'({query})')
-
-    # Year range filter
+        parts.append(f'title:({query})' if title_only else f'({query})')
     if year_from or year_to:
-        y_from = year_from or "*"
-        y_to = year_to or "*"
-        parts.append(f'publicationdateyear:[{y_from} TO {y_to}]')
-
-    # Education level filter
-    # Common ERIC values: "Secondary Education", "Higher Education",
-    # "Elementary Education", "Early Childhood Education", "Adult Education"
+        parts.append(f'publicationdateyear:[{year_from or "*"} TO {year_to or "*"}]')
     if education_level:
         parts.append(f'educationlevel:"{education_level}"')
-
-    # Publication type filter
-    # Common values: "Journal Articles", "Reports - Research",
-    # "Dissertations/Theses", "Books", "Reports - Descriptive"
     if pub_type:
         parts.append(f'publicationtype:"{pub_type}"')
-
-    # Language filter
     if language:
         parts.append(f'language:"{language}"')
-
     return " AND ".join(parts) if parts else "*:*"
 
 
 def _search(solr_query: str, rows: int = 10, start: int = 0) -> dict:
+    rows = min(rows, 200)  # FIX: enforce ERIC API limit
     params = {
         "search": solr_query,
         "format": "json",
@@ -67,8 +48,15 @@ def _search(solr_query: str, rows: int = 10, start: int = 0) -> dict:
         "start": start,
     }
     url = ERIC_API + "?" + urllib.parse.urlencode(params)
-    with urllib.request.urlopen(url, timeout=DEFAULT_TIMEOUT) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(url, timeout=DEFAULT_TIMEOUT) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"ERIC API error: HTTP {e.code} ({e.reason})") from e
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"ERIC API unreachable: {e.reason}") from e
+    except TimeoutError:
+        raise RuntimeError(f"ERIC API timeout after {DEFAULT_TIMEOUT}s") from None
 
 
 def _format_results(data: dict, query_label: str) -> str:
@@ -110,11 +98,7 @@ def _format_results(data: dict, query_label: str) -> str:
 
 
 @mcp.tool()
-def eric_search(
-    query: str,
-    rows: int = 10,
-    start: int = 0,
-) -> str:
+def eric_search(query: str, rows: int = 10, start: int = 0) -> str:
     """
     Search the ERIC database (Education Resources Information Center).
     Covers peer-reviewed journals, reports, curriculum guides, and more
@@ -134,8 +118,13 @@ def eric_search(
         rows: Number of results to return (default 10, max 200)
         start: Offset for pagination (default 0)
     """
-    data = _search(query, rows=rows, start=start)
-    return _format_results(data, query)
+    try:
+        data = _search(query, rows=rows, start=start)
+        return _format_results(data, query)
+    except RuntimeError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        return f"Unexpected error: {e}"
 
 
 @mcp.tool()
@@ -183,18 +172,23 @@ def eric_advanced_search(
         rows: Number of results (default 10, max 200)
         start: Pagination offset (default 0)
     """
-    solr_query = _build_solr_query(
-        query=query,
-        year_from=year_from,
-        year_to=year_to,
-        education_level=education_level,
-        pub_type=pub_type,
-        language=language,
-        title_only=title_only,
-    )
-    data = _search(solr_query, rows=rows, start=start)
-    label = f"{query} [filters: level={education_level}, years={year_from}-{year_to}, type={pub_type}, lang={language}]"
-    return _format_results(data, label)
+    try:
+        solr_query = _build_solr_query(
+            query=query,
+            year_from=year_from,
+            year_to=year_to,
+            education_level=education_level,
+            pub_type=pub_type,
+            language=language,
+            title_only=title_only,
+        )
+        data = _search(solr_query, rows=rows, start=start)
+        label = f"{query} [filters: level={education_level}, years={year_from}-{year_to}, type={pub_type}, lang={language}]"
+        return _format_results(data, label)
+    except RuntimeError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        return f"Unexpected error: {e}"
 
 
 @mcp.tool()
@@ -205,29 +199,34 @@ def eric_get_record(eric_id: str) -> str:
     Args:
         eric_id: The ERIC document ID (e.g., EJ1234567 or ED123456)
     """
-    solr_query = f"id:{eric_id}"
-    data = _search(solr_query, rows=1)
-    docs = data.get("response", {}).get("docs", [])
+    try:
+        solr_query = f"id:{eric_id}"
+        data = _search(solr_query, rows=1)
+        docs = data.get("response", {}).get("docs", [])
 
-    if not docs:
-        return f"Record not found: {eric_id}"
+        if not docs:
+            return f"Record not found: {eric_id}"
 
-    doc = docs[0]
-    lines = []
-    lines.append(f"# {doc.get('title', 'No title')}")
-    lines.append(f"**ERIC ID:** {doc.get('id', '')}")
-    lines.append(f"**Authors:** {', '.join(doc.get('author', [])) or 'Unknown'}")
-    lines.append(f"**Year:** {doc.get('publicationdateyear', 'n.d.')}")
-    lines.append(f"**Source:** {doc.get('source', '')}")
-    lines.append(f"**Type:** {', '.join(doc.get('publicationtype', []))}")
-    lines.append(f"**Education Level:** {', '.join(doc.get('educationlevel', []))}")
-    lines.append(f"**Subject:** {', '.join(doc.get('subject', []))}")
-    lines.append(f"**Descriptor:** {', '.join(doc.get('descriptor', []))}")
-    lines.append(f"**Language:** {', '.join(doc.get('language', []))}")
-    lines.append(f"\n**Abstract:**\n{doc.get('description', 'No abstract available')}")
-    lines.append(f"\n**URL:** https://eric.ed.gov/?id={doc.get('id', '')}")
-
-    return "\n".join(lines)
+        doc = docs[0]
+        lines = [
+            f"# {doc.get('title', 'No title')}",
+            f"**ERIC ID:** {doc.get('id', '')}",
+            f"**Authors:** {', '.join(doc.get('author', [])) or 'Unknown'}",
+            f"**Year:** {doc.get('publicationdateyear', 'n.d.')}",
+            f"**Source:** {doc.get('source', '')}",
+            f"**Type:** {', '.join(doc.get('publicationtype', []))}",
+            f"**Education Level:** {', '.join(doc.get('educationlevel', []))}",
+            f"**Subject:** {', '.join(doc.get('subject', []))}",
+            f"**Descriptor:** {', '.join(doc.get('descriptor', []))}",
+            f"**Language:** {', '.join(doc.get('language', []))}",
+            f"\n**Abstract:**\n{doc.get('description', 'No abstract available')}",
+            f"\n**URL:** https://eric.ed.gov/?id={doc.get('id', '')}",
+        ]
+        return "\n".join(lines)
+    except RuntimeError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        return f"Unexpected error: {e}"
 
 
 @mcp.tool()
@@ -237,6 +236,7 @@ def eric_search_by_descriptor(
     year_to: int = None,
     education_level: str = None,
     rows: int = 10,
+    start: int = 0,
 ) -> str:
     """
     Search ERIC using controlled vocabulary descriptors (ERIC Thesaurus terms).
@@ -252,17 +252,23 @@ def eric_search_by_descriptor(
         year_from: Start year filter (optional)
         year_to: End year filter (optional)
         education_level: Education level filter (optional, e.g. "Secondary Education")
-        rows: Number of results (default 10)
+        rows: Number of results (default 10, max 200)
+        start: Pagination offset for results > rows (default 0)
     """
-    solr_query = _build_solr_query(
-        query=f'descriptor:"{descriptor}"',
-        year_from=year_from,
-        year_to=year_to,
-        education_level=education_level,
-    )
-    data = _search(solr_query, rows=rows)
-    label = f'descriptor:"{descriptor}" [level={education_level}, years={year_from}-{year_to}]'
-    return _format_results(data, label)
+    try:
+        solr_query = _build_solr_query(
+            query=f'descriptor:"{descriptor}"',
+            year_from=year_from,
+            year_to=year_to,
+            education_level=education_level,
+        )
+        data = _search(solr_query, rows=rows, start=start)
+        label = f'descriptor:"{descriptor}" [level={education_level}, years={year_from}-{year_to}]'
+        return _format_results(data, label)
+    except RuntimeError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        return f"Unexpected error: {e}"
 
 
 if __name__ == "__main__":

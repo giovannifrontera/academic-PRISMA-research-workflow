@@ -11,6 +11,7 @@ No API key required.
 import json
 import urllib.request
 import urllib.parse
+import urllib.error
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("doaj")
@@ -22,8 +23,15 @@ DEFAULT_TIMEOUT = 30
 def _get(endpoint: str, params: dict) -> dict:
     url = f"{BASE_URL}/{endpoint}?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers={"Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"DOAJ API error: HTTP {e.code} ({e.reason})") from e
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"DOAJ API unreachable: {e.reason}") from e
+    except TimeoutError:
+        raise RuntimeError(f"DOAJ API timeout after {DEFAULT_TIMEOUT}s") from None
 
 
 def _parse_article(hit: dict) -> dict:
@@ -31,7 +39,14 @@ def _parse_article(hit: dict) -> dict:
     title = src.get("title", "")
     abstract = src.get("abstract", "")
     year = src.get("year", "")
-    journal = src.get("journal", {}).get("title", "") if isinstance(src.get("journal"), dict) else ""
+    # FIX: handle journal as list or dict
+    journal_obj = src.get("journal", {})
+    if isinstance(journal_obj, dict):
+        journal = journal_obj.get("title", "")
+    elif isinstance(journal_obj, list):
+        journal = journal_obj[0].get("title", "") if journal_obj else ""
+    else:
+        journal = ""
     authors = [a.get("name", "") for a in src.get("author", []) if isinstance(a, dict)]
     identifiers = src.get("identifier", [])
     doi = next((i.get("id", "") for i in identifiers if isinstance(i, dict) and i.get("type") == "doi"), "")
@@ -42,15 +57,15 @@ def _parse_article(hit: dict) -> dict:
 
 def _format_articles(results: list, label: str, total: int) -> str:
     if not results:
-        return f"DOAJ — nessun risultato per: {label}"
-    lines = [f"DOAJ — {total} risultati per '{label}' (mostro {len(results)}):\n"]
+        return f"DOAJ — no results for: {label}"
+    lines = [f"DOAJ — {total} results for '{label}' (showing {len(results)}):\n"]
     for i, hit in enumerate(results, 1):
         rec = _parse_article(hit)
         auth = ", ".join(rec["authors"][:3]) + (" et al." if len(rec["authors"]) > 3 else "")
-        line = f"{i}. **{rec['title'] or '(senza titolo)'}**\n"
-        line += f"   {auth or 'N/D'} ({rec['year'] or 'n.d.'})\n"
+        line = f"{i}. **{rec['title'] or '(no title)'}**\n"
+        line += f"   {auth or 'N/A'} ({rec['year'] or 'n.d.'})\n"
         if rec["journal"]:
-            line += f"   Rivista: {rec['journal']}\n"
+            line += f"   Journal: {rec['journal']}\n"
         if rec["doi"]:
             line += f"   DOI: {rec['doi']}\n"
         if rec["doaj_id"]:
@@ -83,26 +98,27 @@ def doaj_search_articles(
         rows: Results per page (default 10, max 100)
         page: Page number (default 1)
     """
-    q_parts = [query]
-    if year_from and year_to:
-        q_parts.append(f"year:[{year_from} TO {year_to}]")
-    elif year_from:
-        q_parts.append(f"year:[{year_from} TO *]")
-    elif year_to:
-        q_parts.append(f"year:[* TO {year_to}]")
-    if country_publisher:
-        q_parts.append(f"index.country_code:{country_publisher}")
+    try:
+        q_parts = [query]
+        if year_from and year_to:
+            q_parts.append(f"year:[{year_from} TO {year_to}]")
+        elif year_from:
+            q_parts.append(f"year:[{year_from} TO *]")
+        elif year_to:
+            q_parts.append(f"year:[* TO {year_to}]")
+        if country_publisher:
+            # FIX: quote country value in Lucene query
+            q_parts.append(f'index.country_code:"{country_publisher}"')
 
-    params = {
-        "q": " AND ".join(q_parts),
-        "pageSize": rows,
-        "page": page,
-        "sort": "score",
-    }
-    data = _get("search/articles", params)
-    results = data.get("results", [])
-    total = data.get("total", 0)
-    return _format_articles(results, query, total)
+        params = {"q": " AND ".join(q_parts), "pageSize": rows, "page": page, "sort": "score"}
+        data = _get("search/articles", params)
+        results = data.get("results", [])
+        total = data.get("total", 0)
+        return _format_articles(results, query, total)
+    except RuntimeError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        return f"Unexpected error: {e}"
 
 
 @mcp.tool()
@@ -122,25 +138,30 @@ def doaj_count(
         year_to: End year
         country_publisher: ISO country code for journal publisher (e.g. "IT")
     """
-    q_parts = [query]
-    if year_from and year_to:
-        q_parts.append(f"year:[{year_from} TO {year_to}]")
-    elif year_from:
-        q_parts.append(f"year:[{year_from} TO *]")
-    elif year_to:
-        q_parts.append(f"year:[* TO {year_to}]")
-    if country_publisher:
-        q_parts.append(f"index.country_code:{country_publisher}")
+    try:
+        q_parts = [query]
+        if year_from and year_to:
+            q_parts.append(f"year:[{year_from} TO {year_to}]")
+        elif year_from:
+            q_parts.append(f"year:[{year_from} TO *]")
+        elif year_to:
+            q_parts.append(f"year:[* TO {year_to}]")
+        if country_publisher:
+            q_parts.append(f'index.country_code:"{country_publisher}"')
 
-    params = {"q": " AND ".join(q_parts), "pageSize": 1, "page": 1}
-    data = _get("search/articles", params)
-    total = data.get("total", 0)
-    parts = [f"DOAJ — risultati per '{query}'"]
-    if country_publisher:
-        parts.append(f"[paese editore: {country_publisher}]")
-    if year_from or year_to:
-        parts.append(f"[{year_from or ''}-{year_to or ''}]")
-    return " ".join(parts) + f": **{total}**"
+        params = {"q": " AND ".join(q_parts), "pageSize": 1, "page": 1}
+        data = _get("search/articles", params)
+        total = data.get("total", 0)
+        parts = [f"DOAJ — results for '{query}'"]
+        if country_publisher:
+            parts.append(f"[publisher country: {country_publisher}]")
+        if year_from or year_to:
+            parts.append(f"[{year_from or ''}-{year_to or ''}]")
+        return " ".join(parts) + f": **{total}**"
+    except RuntimeError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        return f"Unexpected error: {e}"
 
 
 @mcp.tool()
@@ -161,36 +182,41 @@ def doaj_search_journals(
         rows: Results (default 10)
         page: Page (default 1)
     """
-    q_parts = [query]
-    if country:
-        q_parts.append(f"bibjson.publisher.country:{country}")
+    try:
+        q_parts = [query]
+        if country:
+            q_parts.append(f'bibjson.publisher.country:"{country}"')
 
-    params = {"q": " AND ".join(q_parts), "pageSize": rows, "page": page}
-    data = _get("search/journals", params)
-    results = data.get("results", [])
-    total = data.get("total", 0)
+        params = {"q": " AND ".join(q_parts), "pageSize": rows, "page": page}
+        data = _get("search/journals", params)
+        results = data.get("results", [])
+        total = data.get("total", 0)
 
-    if not results:
-        return f"DOAJ Journals — nessun risultato per: {query}"
-    lines = [f"DOAJ Journals — {total} risultati per '{query}' (mostro {len(results)}):\n"]
-    for i, hit in enumerate(results, 1):
-        bib = hit.get("bibjson", {})
-        title = bib.get("title", "N/D")
-        publisher = bib.get("publisher", {}).get("name", "") if isinstance(bib.get("publisher"), dict) else ""
-        country_val = bib.get("publisher", {}).get("country", "") if isinstance(bib.get("publisher"), dict) else ""
-        apc = "Si" if bib.get("apc", {}).get("has_apc") else "No"
-        subjects = [s.get("term", "") for s in bib.get("subject", []) if isinstance(s, dict)]
-        doaj_id = hit.get("id", "")
-        line = f"{i}. **{title}**\n"
-        if publisher:
-            line += f"   Editore: {publisher} ({country_val})\n"
-        line += f"   APC: {apc}\n"
-        if subjects:
-            line += f"   Soggetti: {', '.join(subjects[:5])}\n"
-        if doaj_id:
-            line += f"   DOAJ: https://doaj.org/toc/{doaj_id}\n"
-        lines.append(line)
-    return "\n".join(lines)
+        if not results:
+            return f"DOAJ Journals — no results for: {query}"
+        lines = [f"DOAJ Journals — {total} results for '{query}' (showing {len(results)}):\n"]
+        for i, hit in enumerate(results, 1):
+            bib = hit.get("bibjson", {})
+            title = bib.get("title", "N/A")
+            publisher = bib.get("publisher", {}).get("name", "") if isinstance(bib.get("publisher"), dict) else ""
+            country_val = bib.get("publisher", {}).get("country", "") if isinstance(bib.get("publisher"), dict) else ""
+            apc = "Yes" if bib.get("apc", {}).get("has_apc") else "No"
+            subjects = [s.get("term", "") for s in bib.get("subject", []) if isinstance(s, dict)]
+            doaj_id = hit.get("id", "")
+            line = f"{i}. **{title}**\n"
+            if publisher:
+                line += f"   Publisher: {publisher} ({country_val})\n"
+            line += f"   APC: {apc}\n"
+            if subjects:
+                line += f"   Subjects: {', '.join(subjects[:5])}\n"
+            if doaj_id:
+                line += f"   DOAJ: https://doaj.org/toc/{doaj_id}\n"
+            lines.append(line)
+        return "\n".join(lines)
+    except RuntimeError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        return f"Unexpected error: {e}"
 
 
 if __name__ == "__main__":

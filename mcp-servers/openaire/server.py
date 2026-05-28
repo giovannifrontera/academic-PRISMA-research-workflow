@@ -9,6 +9,7 @@ No API key required.
 import json
 import urllib.request
 import urllib.parse
+import urllib.error
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("openaire")
@@ -20,8 +21,15 @@ DEFAULT_TIMEOUT = 30
 def _request(params: dict) -> dict:
     url = SEARCH_API + "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers={"Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"OpenAIRE API error: HTTP {e.code} ({e.reason})") from e
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"OpenAIRE API unreachable: {e.reason}") from e
+    except TimeoutError:
+        raise RuntimeError(f"OpenAIRE API timeout after {DEFAULT_TIMEOUT}s") from None
 
 
 def _get(obj, *keys):
@@ -57,12 +65,18 @@ def _parse(result: dict) -> dict:
     elif isinstance(desc, dict):
         abstract = desc.get("$", "")
     else:
-        abstract = ""
+        # FIX: preserve abstract when API returns a plain string
+        abstract = str(desc) if desc else ""
 
     pid = meta.get("pid", [])
     if isinstance(pid, dict):
         pid = [pid]
-    doi = next((p.get("$", "") for p in (pid or []) if isinstance(p, dict) and p.get("@classid") == "doi"), "")
+    # FIX: case-insensitive classid comparison for DOI
+    doi = next(
+        (p.get("$", "") for p in (pid or [])
+         if isinstance(p, dict) and p.get("@classid", "").lower() == "doi"),
+        ""
+    )
 
     source = meta.get("source", {})
     if isinstance(source, list):
@@ -89,21 +103,21 @@ def _format(data: dict, label: str) -> str:
     if isinstance(raw, dict):
         raw = [raw]
     if not raw:
-        return f"Nessun risultato per: {label}"
+        return f"OpenAIRE — no results for: {label}"
 
-    lines = [f"OpenAIRE — {total} risultati per '{label}' (mostro {len(raw)}):\n"]
+    lines = [f"OpenAIRE — {total} results for '{label}' (showing {len(raw)}):\n"]
     for i, r in enumerate(raw, 1):
         rec = _parse(r)
         auth = ", ".join(rec["authors"][:3]) + (" et al." if len(rec["authors"]) > 3 else "")
-        line = f"{i}. **{rec['title'] or '(senza titolo)'}**\n"
-        line += f"   {auth or 'N/D'} ({rec['year'] or 'n.d.'})\n"
+        line = f"{i}. **{rec['title'] or '(no title)'}**\n"
+        line += f"   {auth or 'N/A'} ({rec['year'] or 'n.d.'})\n"
         if rec["journal"]:
-            line += f"   Rivista: {rec['journal']}\n"
+            line += f"   Journal: {rec['journal']}\n"
         if rec["doi"]:
             line += f"   DOI: {rec['doi']}\n"
         if rec["openaire_id"]:
             line += f"   OpenAIRE: https://explore.openaire.eu/search/publication?articleId={rec['openaire_id']}\n"
-        line += f"   Accesso: {'Open Access' if rec['open_access'] else 'Limitato'}\n"
+        line += f"   Access: {'Open Access' if rec['open_access'] else 'Limited'}\n"
         if rec["abstract"]:
             line += f"   Abstract: {rec['abstract'][:300]}{'...' if len(rec['abstract']) > 300 else ''}\n"
         lines.append(line)
@@ -133,18 +147,23 @@ def openaire_search(
         rows: Results per page (default 10, max 100)
         page: Page number (default 1)
     """
-    params = {"keywords": query, "format": "json", "page": page, "size": rows}
-    if country:
-        params["country"] = country
-    if year_from:
-        params["fromDateAccepted"] = f"{year_from}-01-01"
-    if year_to:
-        params["toDateAccepted"] = f"{year_to}-12-31"
-    if open_access is True:
-        params["OA"] = "true"
-    elif open_access is False:
-        params["OA"] = "false"
-    return _format(_request(params), query)
+    try:
+        params = {"keywords": query, "format": "json", "page": page, "size": rows}
+        if country:
+            params["country"] = country
+        if year_from:
+            params["fromDateAccepted"] = f"{year_from}-01-01"
+        if year_to:
+            params["toDateAccepted"] = f"{year_to}-12-31"
+        if open_access is True:
+            params["OA"] = "true"
+        elif open_access is False:
+            params["OA"] = "false"
+        return _format(_request(params), query)
+    except RuntimeError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        return f"Unexpected error: {e}"
 
 
 @mcp.tool()
@@ -164,21 +183,26 @@ def openaire_count(
         year_to: End year
         country: ISO country code (e.g. "IT")
     """
-    params = {"keywords": query, "format": "json", "page": 1, "size": 1}
-    if country:
-        params["country"] = country
-    if year_from:
-        params["fromDateAccepted"] = f"{year_from}-01-01"
-    if year_to:
-        params["toDateAccepted"] = f"{year_to}-12-31"
-    data = _request(params)
-    total = _get(data, "response", "header", "total", "$") or "0"
-    parts = [f"OpenAIRE — risultati per '{query}'"]
-    if country:
-        parts.append(f"[{country}]")
-    if year_from or year_to:
-        parts.append(f"[{year_from or ''}-{year_to or ''}]")
-    return " ".join(parts) + f": **{total}**"
+    try:
+        params = {"keywords": query, "format": "json", "page": 1, "size": 1}
+        if country:
+            params["country"] = country
+        if year_from:
+            params["fromDateAccepted"] = f"{year_from}-01-01"
+        if year_to:
+            params["toDateAccepted"] = f"{year_to}-12-31"
+        data = _request(params)
+        total = _get(data, "response", "header", "total", "$") or "0"
+        parts = [f"OpenAIRE — results for '{query}'"]
+        if country:
+            parts.append(f"[{country}]")
+        if year_from or year_to:
+            parts.append(f"[{year_from or ''}-{year_to or ''}]")
+        return " ".join(parts) + f": **{total}**"
+    except RuntimeError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        return f"Unexpected error: {e}"
 
 
 if __name__ == "__main__":

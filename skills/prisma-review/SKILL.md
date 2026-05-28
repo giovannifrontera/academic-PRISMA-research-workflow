@@ -240,7 +240,7 @@ Costruisci le query adattando i parametri. Lancia le ricerche in parallelo.
 | Database | Tool MCP | Parametri chiave |
 |----------|----------|-----------------|
 | `semantic-scholar` | `paper_relevance_search` | `year="AAAA-AAAA"`, `min_citation_count=N`, `fields_of_study=[...]` |
-| `arxiv` | `search_papers` | `date_from="AAAA-MM-GG"`, `categories=[...]` |
+| `arxiv` | `search_papers` | `date_from="AAAA-MM-GG"`, `categories=[...]` — ⚠️ il nome del tool varia per versione; se la call fallisce, verificare il nome esatto con `claude mcp list --verbose` |
 | `pubmed` | `search_pubmed` | `"AAAA:AAAA"[Date - Publication]`, `[MeSH Terms]` |
 | `eric` | `eric_advanced_search` | `query`, `rows` (max 200), `start`, `year_from`, `year_to`, `education_level`, `pub_type`, `language`, `title_only` |
 | `openaire` | `openaire_search` | `query`, `year_from`, `year_to`, `country="IT"` per fonti italiane |
@@ -340,6 +340,15 @@ raw_zenodo.json             ← lista di oggetti dal MCP zenodo
 
 **Perché è critico:** Lo script di deduplicazione in Fase 2 legge questi file. Se non esistono, la Fase 2 non può partire e il corpus andrà perso al termine della sessione.
 
+> ⚠️ **Cosa salvare nei file raw_\*.json:** salva sempre i record **grezzi** restituiti dall'API, non l'output testuale formattato dal tool. In particolare:
+> - **OpenAIRE**: `data['response']['results']['result']` (lista record grezzi)
+> - **CORE**: `data['results']` (lista record grezzi)
+> - **DOAJ**: `data['results']` (lista `bibjson` objects)
+> - **Zenodo**: `data['hits']['hits']` (lista record grezzi)
+> - **ERIC / Semantic Scholar / PubMed / arXiv**: vedi mappatura in Fase 2
+>
+> Se salvi l'output testuale del tool invece dei dict, lo script di Fase 2 non troverà i campi attesi e andrà in crash.
+
 **Come salvare con Python:**
 ```python
 import json
@@ -391,6 +400,8 @@ TOTALE dopo screening:         N
 ```
 
 Aggiorna `prisma_state.json` (sezione `fase2`) e `prisma_log.md` (sezione FASE 2).
+
+> ⚠️ **Corpus zero:** se `TOTALE dopo screening = 0`, **interrompi il workflow**. Non procedere alla Fase 3 con corpus vuoto. Avvisa l'utente e chiedi di: (1) rivedere i criteri di esclusione applicati, (2) ampliare le query di ricerca, (3) estendere il range di anni. Documenta nel `prisma_log.md` il motivo dell'arresto.
 
 Chiedi:
 > "Vuoi rivedere qualche categoria di esclusione o possiamo passare alla Fase 3?"
@@ -568,6 +579,8 @@ Il RAG è il meccanismo principale per generare il report finale senza saturare 
    py hybrid_rag.py index-prisma eligibility_prisma.json
    ```
    `eligibility_prisma.json` (creato in Fase 4) contiene i record completi con abstract — è il file ottimale per il RAG. Se non esiste ancora, usa `screening_prisma.json` come fallback (ha abstracts ma include anche paper esclusi).
+
+   > ⚠️ **Fallback su `screening_prisma.json`:** questo file include i paper non eleggibili (esclusi in Fase 3). Se indicizzato nel RAG, il modello potrebbe recuperarli e citarli nel report finale, violando il guardrail anti-allucinazione della Fase 6. Segnala esplicitamente all'utente che si sta usando il fallback e valuta se filtrare il file prima dell'indicizzazione (rimuovendo i record con `included: false` se presenti).
 
 4. Se l'utente ha PDF manuali da aggiungere, chiedi:
    > "Hai documenti PDF aggiuntivi da includere nel RAG (es. paper scaricati manualmente, linee guida)? Se sì, indicami il percorso della cartella."
