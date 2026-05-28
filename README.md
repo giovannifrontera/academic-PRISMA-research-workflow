@@ -145,9 +145,20 @@ The `hybrid-rag` skill uses a **generated script** pattern rather than a pre-ins
 
 1. The first time you invoke `hybrid-rag`, Claude writes `hybrid_rag.py` into your project folder by copying it from the installed skill template.
 2. You then run `py hybrid_rag.py init`, which installs the required Python packages and creates a `rag_db/` directory in your project folder.
-3. Subsequent commands (`index-prisma`, `query`, etc.) operate on that local database.
+3. The **first indexing run** downloads an embedding model from HuggingFace (see table below). This is a one-time download cached in `~/.cache/huggingface/`.
+4. Subsequent commands (`index-prisma`, `query`, etc.) operate on that local database.
 
 The `rag_db/` directory is **local to each project** — it is never committed to version control and does not exist until you run `init`. Each research project gets its own database built from its own PRISMA results.
+
+### Embedding models
+
+| Key | Model | Size | Speed | Best for |
+|---|---|---|---|---|
+| `minilm` *(default)* | `paraphrase-multilingual-MiniLM-L12-v2` | 400 MB | Fast | < 30 papers |
+| `e5-large` | `intfloat/multilingual-e5-large` | 1.2 GB | Medium | 30–150 papers |
+| `bge-m3` | `BAAI/bge-m3` | 2.3 GB | Slow | > 150 papers |
+
+All models support Italian and English. The default (`minilm`) is used unless you explicitly run `py hybrid_rag.py choose-model --model e5-large` before indexing. Changing the model after indexing requires rebuilding the database.
 
 ---
 
