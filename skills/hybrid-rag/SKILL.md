@@ -73,13 +73,16 @@ I prefissi `query: ` / `passage: ` per `e5-large` sono gestiti automaticamente.
 ### choose-backend — selezione backend vettoriale
 
 ```bash
-py hybrid_rag.py choose-backend          # prompt interattivo (chromadb / qdrant)
+py hybrid_rag.py choose-backend --backend lancedb   # raccomandato
+py hybrid_rag.py choose-backend --backend chromadb
+py hybrid_rag.py choose-backend --backend qdrant
 ```
 
 | Backend | Quando usarlo |
 |---|---|
-| `chromadb` (default) | Uso locale semplice, nessuna dipendenza esterna |
-| `qdrant` | Corpus > 200 paper, filtri avanzati su metadati, performance HNSW |
+| `lancedb` **(raccomandato)** | FTS nativa (tantivy) sostituisce BM25. Stessa libreria del wiki system. Filtri SQL su qualsiasi campo. |
+| `chromadb` (default storico) | Uso legacy, zero config. BM25 manuale via rank-bm25. |
+| `qdrant` | Corpus > 200 paper, HNSW ottimizzato. Richiede qdrant-client. |
 
 **Filtri Qdrant** — disponibili solo con `--filter` su backend Qdrant:
 ```bash
@@ -175,12 +178,12 @@ L'output della query viene stampato come Markdown e mostrato direttamente in con
 ## Note tecniche
 
 **Stack:**
-- **ChromaDB** (default) — persistente, locale, raw (embeddings gestiti manualmente) — `rag_db/`
-- **Qdrant** (opzionale) — vector DB production-grade con HNSW, filtri nativi su metadati, UUID IDs — richiede `qdrant-client`
-- sentence-transformers — modello selezionabile via `choose-model`
-- `rank-bm25` — BM25Okapi per sparse retrieval
+- **LanceDB** (raccomandato) — columnar Arrow format, FTS nativa (tantivy), filtri SQL, stessa libreria del wiki system — `rag_db/`
+- **ChromaDB** (legacy default) — persistente, locale — `rag_db/`; usa `rank-bm25` per sparse retrieval
+- **Qdrant** (opzionale) — HNSW ottimizzato, filtri nativi su metadati — richiede `qdrant-client`
+- `sentence-transformers` — modello selezionabile via `choose-model` (comune a tutti i backend)
 - `pymupdf` (fitz) — estrazione testo PDF
-- RRF con k=60 (default standard)
+- RRF con k=60 — applicato su dense + FTS/BM25
 
 **Config:** `rag_db/config.json` — persiste la scelta del modello, del backend, e tiene traccia di quale modello ha generato gli embedding nel DB.
 
