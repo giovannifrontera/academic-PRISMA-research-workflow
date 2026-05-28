@@ -4,7 +4,7 @@ hybrid_rag.py — Hybrid RAG per ricerche accademiche
 Operazioni: init | choose-model | choose-backend | index-prisma | index-pdf | query | status
 
 Generato dalla skill ~/.claude/skills/hybrid-rag
-Backend supportati: chromadb (default) | qdrant
+Backend supportati: chromadb (default) | lancedb (raccomandato) | qdrant
 """
 
 import argparse
@@ -276,14 +276,19 @@ class _LanceBackend:
     def _schema(self, vector_size: int):
         import pyarrow as pa
         return pa.schema([
-            pa.field("id",        pa.string()),
-            pa.field("text",      pa.string()),
-            pa.field("title",     pa.string()),
-            pa.field("authors",   pa.string()),
-            pa.field("year",      pa.string()),
-            pa.field("doi",       pa.string()),
-            pa.field("source_db", pa.string()),
-            pa.field("vector",    pa.list_(pa.float32(), vector_size)),
+            pa.field("id",           pa.string()),
+            pa.field("text",         pa.string()),
+            pa.field("title",        pa.string()),
+            pa.field("authors",      pa.string()),
+            pa.field("year",         pa.string()),
+            pa.field("doi",          pa.string()),
+            pa.field("source_db",    pa.string()),
+            # PDF-specific fields (empty string for PRISMA papers)
+            pa.field("filename",     pa.string()),
+            pa.field("chunk_index",  pa.int32()),
+            pa.field("total_chunks", pa.int32()),
+            pa.field("page",         pa.int32()),
+            pa.field("vector",       pa.list_(pa.float32(), vector_size)),
         ])
 
     def _get_table(self, coll: str, vector_size: int = None):
@@ -292,8 +297,11 @@ class _LanceBackend:
                 self._tables[coll] = self._db.open_table(coll)
             except Exception:
                 if vector_size is None:
+                    # ROB-7: use the active model's actual dimension, not a hardcoded default.
+                    # This prevents creating a table with wrong schema when vector_size is
+                    # missing from config (e.g. after switching from another backend).
                     cfg = _load_config()
-                    vector_size = cfg.get("vector_size", MODEL_CATALOG[DEFAULT_MODEL_KEY]["dim"])
+                    vector_size = cfg.get("vector_size") or _active_model_cfg(cfg)["dim"]
                 self._tables[coll] = self._db.create_table(
                     coll, schema=self._schema(vector_size)
                 )
@@ -306,18 +314,24 @@ class _LanceBackend:
         cfg["vector_size"] = vector_size
         _save_config(cfg)
 
-    def upsert(self, coll: str, docs: list, embeddings: list, ids: list, metas: list):
+    def upsert(self, coll: str, docs: list, embeddings: list, ids: list, metas: list,
+               rebuild_fts: bool = True):
         table = self._get_table(coll)
         records = [
             {
-                "id":        doc_id,
-                "text":      doc,
-                "title":     str(meta.get("title", "")),
-                "authors":   str(meta.get("authors", "")),
-                "year":      str(meta.get("year", "")),
-                "doi":       str(meta.get("doi", "")),
-                "source_db": str(meta.get("source_db", "")),
-                "vector":    [float(x) for x in emb],
+                "id":           doc_id,
+                "text":         doc,
+                "title":        str(meta.get("title", "")),
+                "authors":      str(meta.get("authors", "")),
+                "year":         str(meta.get("year", "")),
+                "doi":          str(meta.get("doi", "")),
+                "source_db":    str(meta.get("source_db", "")),
+                # PDF fields — empty for PRISMA papers (ROB-2)
+                "filename":     str(meta.get("filename", "")),
+                "chunk_index":  int(meta.get("chunk_index", 0)),
+                "total_chunks": int(meta.get("total_chunks", 0)),
+                "page":         int(meta.get("page", 0)),
+                "vector":       [float(x) for x in emb],
             }
             for doc, emb, doc_id, meta in zip(docs, embeddings, ids, metas)
         ]
@@ -325,17 +339,24 @@ class _LanceBackend:
               .when_matched_update_all()
               .when_not_matched_insert_all()
               .execute(records))
+        # ROB-1: caller decides whether to rebuild FTS (deferred for index-pdf batch)
+        if rebuild_fts:
+            self._rebuild_fts(coll)
+
+    def _rebuild_fts(self, coll: str):
         try:
-            table.create_fts_index("text", replace=True)
+            self._get_table(coll).create_fts_index("text", replace=True)
         except Exception as e:
-            print(f"  Avviso FTS index: {e}")
+            print(f"  Avviso FTS index su '{coll}': {e}")
 
     def search(self, coll: str, query_emb: list, n: int, filter_obj=None) -> list:
         table = self._get_table(coll)
         if table.count_rows() == 0:
             return []
         try:
-            q = table.search(query_emb).limit(n)
+            # ROB-3: force cosine metric so _distance is in [0,2] and 1-dist is meaningful.
+            # Without explicit metric LanceDB defaults to L2, making 1-dist semantically wrong.
+            q = table.search(query_emb).metric("cosine").limit(n)
             if filter_obj:
                 q = q.where(filter_obj, prefilter=True)
             df = q.to_pandas()
@@ -501,7 +522,9 @@ def _parse_lance_filter(filter_str: str) -> Optional[str]:
             float(val)
             parts.append(f"{key} {op} {val}")
         except ValueError:
-            parts.append(f"{key} {op} '{val}'")
+            # ROB-4: escape single quotes to prevent SQL injection / parse errors
+            safe_val = val.replace("'", "''")
+            parts.append(f"{key} {op} '{safe_val}'")
     return " AND ".join(parts) if parts else None
 
 
@@ -674,9 +697,13 @@ def op_init():
         print("Dipendenze già installate.")
 
     Path(RAG_DIR).mkdir(exist_ok=True)
-    if not CONFIG_FILE.exists():
-        _save_config({"model_key": DEFAULT_MODEL_KEY, "backend": BACKEND_CHROMA})
+    # Persist config preserving any backend/model already chosen by the user.
+    # Do NOT overwrite with hardcoded defaults — that would silently reset a
+    # prior choose-backend / choose-model call.
+    _save_config(cfg)
 
+    global _backend_instance
+    _backend_instance = None  # ROB-6: force fresh instance after (re)init
     model_cfg = _active_model_cfg(cfg)
     backend = _get_backend(cfg)
     backend.init_collections(vector_size=model_cfg["dim"])
@@ -753,7 +780,13 @@ def op_index_prisma(json_path: str):
 
     for i, paper in enumerate(papers):
         raw_id = paper.get("doi") or paper.get("id") or f"paper_{i}"
-        doc_id = str(raw_id).replace("/", "_").replace(":", "_")[:100]
+        # ROB-5: use hash for long IDs to avoid collisions from truncation
+        _clean = str(raw_id).replace("/", "_").replace(":", "_")
+        if len(_clean) > 100:
+            import hashlib
+            doc_id = _clean[:80] + "_" + hashlib.md5(str(raw_id).encode()).hexdigest()[:12]
+        else:
+            doc_id = _clean
         docs.append(_build_prisma_doc(paper))
         ids.append(doc_id)
         # year come int per filtri range in Qdrant
@@ -821,6 +854,8 @@ def op_index_pdf_folder(folder: str):
     backend = _get_backend(cfg)
     print(f"Modello: {model_cfg['label']}")
 
+    MAX_CHUNKS_PER_PDF = 500   # ROB-8: guard against huge PDFs flooding the index
+    EMBED_BATCH = 64           # ROB-8: stream embeddings to avoid OOM on large corpora
     total_chunks = 0
 
     for pdf_path in pdfs:
@@ -836,12 +871,22 @@ def op_index_pdf_folder(folder: str):
                 continue
 
             chunks = _chunk_text(full_text)
+            if len(chunks) > MAX_CHUNKS_PER_PDF:
+                print(f"  {pdf_path.name}: {len(chunks)} chunk → troncato a {MAX_CHUNKS_PER_PDF}")
+                chunks = chunks[:MAX_CHUNKS_PER_PDF]
+
             stem = pdf_path.stem[:50]
 
+            # BUG-3 fix: build page boundaries on the same text used for chunking
+            # so cumulative offsets are comparable.
+            preprocessed_pages = []
+            for pnum, ptxt in pages_text:
+                words = ptxt.split()
+                preprocessed_pages.append((pnum, " ".join(words)))
             running = 0
             page_boundaries = []
-            for pnum, ptxt in pages_text:
-                running += len(ptxt)
+            for pnum, processed in preprocessed_pages:
+                running += len(processed)
                 page_boundaries.append((running, pnum))
 
             chunk_pages = _assign_pages(chunks, page_boundaries)
@@ -849,6 +894,7 @@ def op_index_pdf_folder(folder: str):
             metas_c = [
                 {
                     "source_type":  SOURCE_PDF,
+                    "source_db":    SOURCE_PDF,
                     "filename":     pdf_path.name,
                     "chunk_index":  j,
                     "total_chunks": len(chunks),
@@ -857,13 +903,24 @@ def op_index_pdf_folder(folder: str):
                 for j in range(len(chunks))
             ]
 
-            embeddings_c = _embed_docs(chunks, model_cfg)
-            backend.upsert(COLLECTION_PDF, chunks, embeddings_c, ids_c, metas_c)
+            # ROB-8: embed in batches to avoid loading all chunk vectors into RAM at once
+            all_embeddings = []
+            for i in range(0, len(chunks), EMBED_BATCH):
+                all_embeddings.extend(_embed_docs(chunks[i:i + EMBED_BATCH], model_cfg))
+
+            # ROB-1: defer FTS rebuild to after all PDFs are processed
+            upsert_kwargs = {"rebuild_fts": False} if hasattr(backend, "_rebuild_fts") else {}
+            backend.upsert(COLLECTION_PDF, chunks, all_embeddings, ids_c, metas_c, **upsert_kwargs)
             total_chunks += len(chunks)
             print(f"  {pdf_path.name}: {len(chunks)} chunk")
 
         except Exception as e:
             print(f"  {pdf_path.name}: errore — {e}")
+
+    # ROB-1: rebuild FTS once after all PDFs
+    if hasattr(backend, "_rebuild_fts"):
+        print("  Ricostruzione indice FTS…")
+        backend._rebuild_fts(COLLECTION_PDF)
 
     print(f"\nPDF indicizzati: {len(pdfs)} file, {total_chunks} chunk in '{COLLECTION_PDF}'")
 
@@ -908,6 +965,13 @@ def op_query(
         else:
             print("AVVISO: --filter è supportato solo con backend lancedb e qdrant, verrà ignorato.")
 
+    # BUG-2 fix: check corpus before any search so we give a clear message
+    # regardless of backend (FTS returning [] doesn't distinguish "empty" from "no match")
+    total_indexed = sum(backend.count(c) for c in collections_to_search)
+    if total_indexed == 0:
+        print("Nessun documento indicizzato. Esegui index-prisma o index-pdf prima.")
+        return
+
     # 1. Dense search
     dense_map: dict = {}
     dense_ranked: list = []
@@ -933,17 +997,11 @@ def op_query(
                 if hit:
                     dense_map[doc_id] = {**hit, "score": 0.0}
         sparse_label = "FTS"
-        if not dense_map:
-            print("Nessun documento indicizzato. Esegui index-prisma o index-pdf prima.")
-            return
     else:
         # ChromaDB / Qdrant: BM25 manuale su tutti i documenti
         all_docs = []
         for coll in collections_to_search:
             all_docs.extend(backend.get_all(coll))
-        if not all_docs:
-            print("Nessun documento indicizzato. Esegui index-prisma o index-pdf prima.")
-            return
         from rank_bm25 import BM25Okapi
         tokenized_corpus = [d["text"].lower().split() for d in all_docs]
         bm25 = BM25Okapi(tokenized_corpus)

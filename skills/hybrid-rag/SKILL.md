@@ -1,13 +1,13 @@
 ---
 name: hybrid-rag
-description: Use when creating, updating, or querying a local Hybrid RAG database from PRISMA JSON metadata or PDF documents in a folder. Triggered by prisma-review (after Fase 4) or edtech-pilot-design (to query evidence). Hybrid RAG combines dense vector search and BM25 sparse retrieval with Reciprocal Rank Fusion. Results are displayed as Markdown.
+description: Use when creating, updating, or querying a local Hybrid RAG database from PRISMA JSON metadata or PDF documents in a folder. Triggered by prisma-review (after Fase 4) or edtech-pilot-design (to query evidence). Hybrid RAG combines dense vector search (sentence-transformers) and sparse retrieval — native FTS via LanceDB (recommended) or BM25 — fused with Reciprocal Rank Fusion. Results are displayed as Markdown.
 ---
 
 # Hybrid RAG — Ricerche Accademiche
 
 ## Overview
 
-Gestisce un database RAG locale che combina **ricerca densa** (ChromaDB + sentence-transformers) e **ricerca sparsa** (BM25) con **Reciprocal Rank Fusion (RRF)**. Supporta due fonti di documenti:
+Gestisce un database RAG locale che combina **ricerca densa** (sentence-transformers) e **ricerca sparsa** (FTS nativa su LanceDB, oppure BM25 su ChromaDB/Qdrant) con **Reciprocal Rank Fusion (RRF)**. Supporta due fonti di documenti:
 
 - **PRISMA JSON** — metadati strutturati estratti dalla skill `prisma-review`
 - **PDF manuali** — documenti PDF in una cartella fornita dall'utente
@@ -20,8 +20,15 @@ Il DB è **per-progetto**: vive in `rag_db/` nella cartella di lavoro corrente.
 
 1. Verifica se `hybrid_rag.py` esiste nella cartella di lavoro corrente.
 2. Se non esiste → usare il tool **Read** su `~/.claude/skills/hybrid-rag/hybrid_rag_template.py`, poi il tool **Write** per creare `./hybrid_rag.py` con lo stesso contenuto. Questo è il passaggio che genera lo script nella cartella del progetto — l'utente non può eseguirlo prima di questo momento.
-3. Esegui: `py hybrid_rag.py init`
-   - Installa automaticamente le dipendenze Python: `sentence-transformers`, `rank-bm25`, `pymupdf`, `chromadb` (o `qdrant-client` se backend Qdrant).
+3. **Per nuovi progetti: scegli il backend prima di `init`** (INC-4):
+   ```bash
+   py hybrid_rag.py choose-backend --backend lancedb   # raccomandato
+   ```
+4. Esegui: `py hybrid_rag.py init`
+   - Installa automaticamente le dipendenze Python in base al backend scelto:
+     - `lancedb` → `sentence-transformers`, `pymupdf`, `lancedb` (no rank-bm25)
+     - `chromadb` → `sentence-transformers`, `rank-bm25`, `pymupdf`, `chromadb`
+     - `qdrant` → `sentence-transformers`, `rank-bm25`, `pymupdf`, `qdrant-client`
    - Crea la cartella `rag_db/` nella directory di lavoro corrente.
    - Il DB è locale al progetto: ogni review ha il suo.
 
@@ -84,7 +91,7 @@ py hybrid_rag.py choose-backend --backend qdrant
 | `chromadb` (default storico) | Uso legacy, zero config. BM25 manuale via rank-bm25. |
 | `qdrant` | Corpus > 200 paper, HNSW ottimizzato. Richiede qdrant-client. |
 
-**Filtri Qdrant** — disponibili solo con `--filter` su backend Qdrant:
+**Filtri su metadati** — disponibili con backend LanceDB e Qdrant:
 ```bash
 py hybrid_rag.py query "SRL chatbot" --filter "year>=2020"
 py hybrid_rag.py query "metacognition" --filter "year>=2019,source_db=eric"
@@ -191,11 +198,12 @@ L'output della query viene stampato come Markdown e mostrato direttamente in con
 - `prisma_papers` — paper indicizzati da PRISMA JSON
 - `pdf_manual` — chunk da PDF manuali
 
-**Dipendenze:** installate automaticamente da `init`
+**Dipendenze:** installate automaticamente da `init` in base al backend scelto
 ```
-sentence-transformers, rank-bm25, pymupdf
-+ chromadb          (backend=chromadb, default)
-+ qdrant-client     (backend=qdrant, opzionale)
+sentence-transformers, pymupdf          (comuni a tutti i backend)
++ lancedb                               (backend=lancedb, raccomandato — no rank-bm25)
++ chromadb, rank-bm25                   (backend=chromadb, legacy default)
++ qdrant-client, rank-bm25              (backend=qdrant, opzionale)
 ```
 
 **Chunking PDF:** ~800 caratteri per chunk, chunk < 50 caratteri scartati automaticamente.
@@ -209,7 +217,7 @@ sentence-transformers, rank-bm25, pymupdf
 **Qdrant — note specifiche:**
 - IDs: stringa → UUID deterministico via `uuid5(NAMESPACE_DNS, str_id)`; l'ID originale è salvato nel payload come `_doc_id`
 - Il campo `year` è salvato come `int` per abilitare i filtri range (`year>=2020`)
-- Filtri disponibili solo con backend Qdrant: `--filter 'year>=2020,source_db=eric'`
+- Filtri disponibili con backend LanceDB e Qdrant: `--filter 'year>=2020,source_db=eric'`
 - `get_all()` usa `scroll` con limite hardcoded a 10.000: con corpus PDF molto estesi (centinaia di documenti lunghi, migliaia di chunk) i risultati BM25 possono essere incompleti. Per corpora così grandi preferisci Qdrant + filtri invece di BM25 puro.
 
 **Portabilità path:** i comandi `init` e setup usano path relativi (`rag_db/`) e funzionano su qualsiasi sistema. Il path assoluto `C:/Users/<username>/...` appare solo nelle istruzioni di installazione della skill — su Windows: C:/Users/<username>/.claude/skills/.
