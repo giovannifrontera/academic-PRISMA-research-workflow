@@ -1,196 +1,173 @@
 <div align="center">
 
-# 🎓 Academic PRISMA Research Workflow
+# Academic PRISMA Research Workflow
 
-**Your end-to-end AI research assistant powered by Claude Code**
+**A Claude Code toolkit for rigorous, reproducible academic research**
 
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Claude Code](https://img.shields.io/badge/Powered_by-Claude_Code-purple.svg)](https://claude.ai/code)
 
-*A complete, rigorous, and automated toolkit covering the full academic pipeline: from PRISMA systematic literature reviews to mixed-methods pilot study design and preprint generation.*
-
 </div>
 
----
-
-## 🌟 Why this workflow? (Punti di forza)
-
-Conducting academic research requires extreme rigor, especially during systematic literature reviews. This workflow transforms **Claude Code** into a specialized academic assistant that doesn't just "chat" about papers, but actively **executes a structured, reproducible methodology**.
-
-*   **📊 Rigore Metodologico**: Implementa nativamente le linee guida **PRISMA** per le revisioni sistematiche (Screening, Eligibility, Extraction).
-*   **🔍 Ricerca Ibrida Avanzata (Hybrid RAG)**: Non si basa solo su embedding semantici. Combina **Dense Vector Search** + **BM25 Sparse Retrieval** + **RRF (Reciprocal Rank Fusion)** per non perdere mai un paper rilevante.
-*   **🔌 Integrazione Database Accademici**: Si connette tramite protocollo MCP ai principali database mondiali (Semantic Scholar, PubMed, arXiv, ERIC, OpenAIRE).
-*   **📝 Orientato alla Pubblicazione**: Include tool per la progettazione di studi pilota (con focus specifico sul contesto Ed-Tech italiano/MIUR) e l'esportazione automatica in formati standard (Word/DOCX) per l'invio alle riviste.
-
-## 🎯 Ambiti di Utilizzo (Use Cases)
-
-Questo workflow è stato progettato pensando alle esigenze reali dei ricercatori:
-
-*   **Dottorandi e Ricercatori (PhD / Post-Doc)**: Per accelerare drasticamente la stesura del capitolo di *State of the Art* o la redazione di systematic reviews.
-*   **Ricerca in ambito Ed-Tech / Scienze della Formazione**: Include un modulo iper-specializzato per progettare studi pilota in ambito scolastico, nel rispetto delle normative italiane (GDPR, INVALSI).
-*   **Team di Ricerca Interdisciplinari**: Standardizza il processo di estrazione dati (grazie a template JSON rigidi) riducendo i bias soggettivi.
-*   **Ricercatori Indipendenti**: Permette di condurre ricerche bibliografiche estese senza dover acquistare licenze software costose, sfruttando API gratuite.
+This workflow turns Claude Code into a structured academic research assistant. It covers the full pipeline — from PRISMA systematic literature reviews to pilot study design and preprint export — using a set of interconnected skills and custom MCP servers that connect Claude directly to academic databases.
 
 ---
 
-## 🚀 The Core Pipeline
-
-**Five interconnected skills** guide you through the entire research workflow. Just ask Claude Code to start one of these steps:
+## Pipeline
 
 ```mermaid
-graph TD;
-    A[🔍 prisma-review] -->|JSON Metadata| B[🧠 hybrid-rag];
-    B -->|Evidence| C[🧪 edtech-pilot-design];
-    C -->|Markdown| D[📄 pandoc-export];
+graph LR;
+    A[prisma-review] -->|eligibility_prisma.json| B[hybrid-rag];
+    B -->|rag_db/| C[edtech-pilot-design];
+    C -->|preprint_bozza.md| D[pandoc-export];
 ```
 
-*   **`[prisma-review]`** → Systematic literature review (PRISMA methodology)
-*   **`[hybrid-rag]`** → Local vector database for evidence retrieval
-*   **`[edtech-pilot-design]`** → Mixed-methods pilot study design
-*   **`[pandoc-export]`** → Export any Markdown output to Word (.docx)
-
-A fifth skill, **`[pipeline-ricerca]`**, serves as a cross-skill reference map with file dependencies and entry points for any stage of the workflow.
+Each stage hands off structured files to the next, so you can resume mid-workflow across sessions without losing context.
 
 ---
 
-## 🛠️ Detailed Skills Breakdown
+## Skills
 
-| Skill | Description |
+| Skill | What it does |
 |---|---|
-| 📑 **`prisma-review`** | 6-phase PRISMA systematic review with MCP database search (Semantic Scholar, PubMed, ERIC, OpenAIRE), screening, eligibility, data extraction, quality assessment, and RAG-powered report generation. |
-| 🧠 **`hybrid-rag`** | Builds and queries a local Hybrid RAG database from PRISMA JSON metadata or PDF documents. Combines dense vector search (ChromaDB or Qdrant + sentence-transformers) with BM25 sparse retrieval and Reciprocal Rank Fusion. |
-| 🧪 **`edtech-pilot-design`** | Designs quasi-experimental mixed-methods pilot studies for Ed-Tech research. Covers framework, design, instruments (with Italian validation), power analysis, ethics (GDPR/MIUR), OSF pre-registration, and IMRAD preprint writing. |
-| 🗺️ **`pipeline-ricerca`** | Reference map of the full pipeline: file dependencies, handoff points, and 8 entry-point scenarios for resuming mid-workflow. |
-| 🖨️ **`pandoc-export`** | Converts Markdown outputs (PRISMA report, pilot protocol, preprint) to Word (.docx) using pandoc. |
+| `prisma-review` | Runs a 6-phase PRISMA systematic review: database search across 8 sources, deduplication, screening, eligibility, data extraction with quality scoring, and RAG-powered report generation. |
+| `hybrid-rag` | Builds a local hybrid retrieval database from your PRISMA metadata or PDFs. Combines dense vector search (sentence-transformers) with BM25 sparse retrieval and Reciprocal Rank Fusion for high-recall evidence retrieval. |
+| `edtech-pilot-design` | Designs a mixed-methods quasi-experimental pilot study. Covers theoretical framework, instruments, power analysis, ethics (GDPR/MIUR), OSF pre-registration, and IMRAD preprint drafting. Tailored for Italian Ed-Tech research contexts. |
+| `pipeline-ricerca` | Reference map of the full pipeline: file dependencies, handoff points between skills, and entry-point scenarios for resuming at any stage. |
+| `pandoc-export` | Converts any Markdown output (review report, pilot protocol, preprint) to Word (.docx) via pandoc. |
 
 ---
 
-## 📡 MCP Servers
+## MCP Servers
 
-Five custom MCP servers extend Claude Code's search capabilities. Each targets a distinct academic source, enabling per-database result tracking required by PRISMA:
+Eight academic database servers give Claude direct search access during the PRISMA identification phase. Each is a separate server so result counts can be tracked per source, as required by PRISMA reporting.
 
-| Server | API | Target | Key required |
+### Custom servers (included in this repo)
+
+| Server | Source | Coverage | API key |
 |---|---|---|---|
-| 🎓 `eric` | [ERIC API](https://api.ies.ed.gov/eric/) | Education Resources Information Center — peer-reviewed ed research | No |
-| 🌍 `openaire` | [OpenAIRE Graph API](https://graph.openaire.eu/develop/api.html) | European open access + Italian institutional repositories (IRIS) | No |
-| 📦 `core` | [CORE API v3](https://api.core.ac.uk/docs/v3) | Full-text OA aggregator — strong Italian repository coverage | Free key |
-| 📰 `doaj` | [DOAJ API](https://doaj.org/api/docs) | Directory of Open Access Journals — filterable by publisher country | No |
-| 🗄️ `zenodo` | [Zenodo REST API](https://developers.zenodo.org/) | Preprints, datasets, publications — Italian Horizon Europe outputs | No |
+| `eric` | [ERIC API](https://api.ies.ed.gov/eric/) | Education research, peer-reviewed | No |
+| `openaire` | [OpenAIRE Graph API](https://graph.openaire.eu/develop/api.html) | European open access + Italian institutional repositories (IRIS) | No |
+| `core` | [CORE API v3](https://api.core.ac.uk/docs/v3) | Full-text OA aggregator, strong Italian repository coverage | Free |
+| `doaj` | [DOAJ API](https://doaj.org/api/docs) | Open access journals, filterable by publisher country | No |
+| `zenodo` | [Zenodo REST API](https://developers.zenodo.org/) | Preprints, datasets, Horizon Europe outputs | No |
 
-Additionally, the workflow uses these installable MCP servers:
+### External servers (pip-installable)
 
-| Server | Install Command | Notes |
+| Server | Install | API key |
 |---|---|---|
-| 📚 `semantic-scholar` | `pip install semantic-scholar-fastmcp` | Requires free API key from [semanticscholar.org](https://www.semanticscholar.org/product/api) |
-| ⚕️ `pubmed` | `pip install mcp-simple-pubmed` | Free, no key required |
-| 🧮 `arxiv` | `pip install arxiv-mcp-server` | Free, no key required |
+| `semantic-scholar` | `pip install semantic-scholar-fastmcp` | Free — [get one here](https://www.semanticscholar.org/product/api) |
+| `pubmed` | `pip install mcp-simple-pubmed` | No |
+| `arxiv` | `pip install arxiv-mcp-server` | No |
 
 ---
 
-## ⚙️ Installation & Setup
+## Installation
 
-### 1. Install Claude Code
-Follow the [official instructions](https://docs.anthropic.com/en/docs/claude-code).
+### Requirements
 
-### 2. Copy the Skills
-Install the specialized skills into your Claude configuration:
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+- Python 3.10+
+- [Pandoc](https://pandoc.org/installing.html) (for Word export only)
+
+### 1. Install the skills
+
+**Linux / macOS**
 ```bash
-# Linux / macOS
 cp -r skills/* ~/.claude/skills/
+```
 
-# Windows (PowerShell)
+**Windows (PowerShell)**
+```powershell
 Copy-Item -Recurse skills\* $env:USERPROFILE\.claude\skills\
 ```
 
-### 3. Install MCP Servers
+### 2. Install the custom MCP servers
+
+**Linux / macOS**
 ```bash
-# 1. Local custom servers (copy to Claude config)
-cp -r mcp-servers/eric ~/.claude/mcp-servers/
-cp -r mcp-servers/openaire ~/.claude/mcp-servers/
-cp -r mcp-servers/core ~/.claude/mcp-servers/
-cp -r mcp-servers/doaj ~/.claude/mcp-servers/
-cp -r mcp-servers/zenodo ~/.claude/mcp-servers/
+cp -r mcp-servers/eric mcp-servers/openaire mcp-servers/core mcp-servers/doaj mcp-servers/zenodo ~/.claude/mcp-servers/
 
-# Register with Claude Code
-claude mcp add eric python ~/.claude/mcp-servers/eric/server.py
+claude mcp add eric     python ~/.claude/mcp-servers/eric/server.py
 claude mcp add openaire python ~/.claude/mcp-servers/openaire/server.py
-claude mcp add core python ~/.claude/mcp-servers/core/server.py
-claude mcp add doaj python ~/.claude/mcp-servers/doaj/server.py
-claude mcp add zenodo python ~/.claude/mcp-servers/zenodo/server.py
+claude mcp add doaj     python ~/.claude/mcp-servers/doaj/server.py
+claude mcp add zenodo   python ~/.claude/mcp-servers/zenodo/server.py
 
-
-# Optional: add CORE API key for full access (free at https://core.ac.uk/services/api)
+# CORE requires a free API key — get one at https://core.ac.uk/services/api
 claude mcp add core python ~/.claude/mcp-servers/core/server.py \
   -e CORE_API_KEY=your_key_here
+```
 
-# Windows (PowerShell)
-Copy-Item -Recurse mcp-servers\eric $env:USERPROFILE\.claude\mcp-servers\
-Copy-Item -Recurse mcp-servers\openaire $env:USERPROFILE\.claude\mcp-servers\
-Copy-Item -Recurse mcp-servers\core $env:USERPROFILE\.claude\mcp-servers\
-Copy-Item -Recurse mcp-servers\doaj $env:USERPROFILE\.claude\mcp-servers\
-Copy-Item -Recurse mcp-servers\zenodo $env:USERPROFILE\.claude\mcp-servers\
+**Windows (PowerShell)**
+```powershell
+$mcp = "$env:USERPROFILE\.claude\mcp-servers"
+Copy-Item -Recurse mcp-servers\eric, mcp-servers\openaire, mcp-servers\core, mcp-servers\doaj, mcp-servers\zenodo $mcp\
 
-# 2. Install external MCP servers via pip
+$py = (Get-Command python).Source
+claude mcp add eric     $py "$mcp\eric\server.py"
+claude mcp add openaire $py "$mcp\openaire\server.py"
+claude mcp add doaj     $py "$mcp\doaj\server.py"
+claude mcp add zenodo   $py "$mcp\zenodo\server.py"
+
+# CORE requires a free API key — get one at https://core.ac.uk/services/api
+claude mcp add core $py "$mcp\core\server.py" -e CORE_API_KEY=your_key_here
+```
+
+### 3. Install the external MCP servers
+
+```bash
 pip install semantic-scholar-fastmcp mcp-simple-pubmed arxiv-mcp-server
 
-# Register semantic-scholar with your API key
+# semantic-scholar requires a free API key
 claude mcp add semantic-scholar semantic-scholar-fastmcp \
   -e SEMANTIC_SCHOLAR_API_KEY=your_key_here \
   -e SEMANTIC_SCHOLAR_ENABLE_HTTP_BRIDGE=0
 
-# Register pubmed and arxiv
 claude mcp add pubmed mcp-simple-pubmed
-claude mcp add arxiv arxiv-mcp-server
+claude mcp add arxiv  arxiv-mcp-server
 ```
 
-### 4. Initialize Hybrid-RAG (On First Use)
-The `hybrid-rag` skill will copy `hybrid_rag_template.py` to your project folder and run:
-```bash
-py hybrid_rag.py init      # Windows
-python3 hybrid_rag.py init # Linux / macOS
-```
-*This automatically installs dependencies: `sentence-transformers`, `rank-bm25`, `pymupdf`, `chromadb`.*
+### 4. Verify
 
-### 5. Verify Configuration
 ```bash
 claude mcp list
-```
-*All servers should show a ✓ Connected status.*
-
----
-
-## 🕹️ Usage
-
-Start any skill via the `Skill` tool in Claude Code by typing:
-
-```python
-Skill("prisma-review")        # Start a new systematic review
-Skill("hybrid-rag")           # Build or query the RAG database
-Skill("edtech-pilot-design")  # Design a pilot study
-Skill("pipeline-ricerca")     # Check workflow status and file map
-Skill("pandoc-export")        # Export to Word
+# All servers should show ✓ Connected
 ```
 
-*💡 Tip: Or just describe your task in natural language — Claude Code will select the relevant skill automatically!*
+---
+
+## Usage
+
+Start any skill by describing your task in Claude Code, or invoke one directly:
+
+```
+Start a PRISMA systematic review on chatbot use in secondary education
+```
+
+```
+Build a RAG database from my eligibility_prisma.json
+```
+
+```
+Design a pilot study based on my PRISMA synthesis
+```
+
+```
+Export report_finale.md to Word
+```
+
+The `pipeline-ricerca` skill acts as a map if you need to resume mid-workflow or understand which files connect which stages.
 
 ---
 
-## 📋 Requirements
+## Notes
 
-*   **Claude Code** (any plan)
-*   **Python 3.10+**
-*   **Pandoc** (for Word export) — e.g., `winget install JohnMacFarlane.Pandoc` on Windows.
-
----
-
-## 🌍 Language
-
-The skill instructions are natively written in **Italian**, targeting Italian academic researchers (specifically in the Ed-Tech/School sectors). However, the RAG system and MCP tools fully support both Italian and English queries and documents.
+- Skill instructions are written in **Italian**, as the workflow targets Italian academic researchers (Ed-Tech, Scienze della Formazione). The MCP tools and RAG system handle both Italian and English documents.
+- The `edtech-pilot-design` skill includes Italian-specific content: MIUR/INVALSI compliance, Italian validated instruments, and OSF pre-registration guidance.
 
 ---
 
-## ⚖️ License
+## License
 
-**AGPL-3.0** — requires anyone who distributes or runs the software as a service to share the source code.
-
+[AGPL-3.0](LICENSE) — anyone who distributes or runs this software as a service must publish the source code.
