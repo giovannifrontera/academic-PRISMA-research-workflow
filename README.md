@@ -68,12 +68,15 @@ A fifth skill, **`[pipeline-ricerca]`**, serves as a cross-skill reference map w
 
 ## 📡 MCP Servers
 
-Two custom MCP servers extend Claude Code's search capabilities directly out of the box:
+Five custom MCP servers extend Claude Code's search capabilities. Each targets a distinct academic source, enabling per-database result tracking required by PRISMA:
 
-| Server | API | Target |
-|---|---|---|
-| 🎓 `eric` | [ERIC API](https://api.ies.ed.gov/eric/) *(free, no key)* | Education Resources Information Center — peer-reviewed ed research |
-| 🇮🇹 `ricerca-italia` | [OpenAIRE API](https://graph.openaire.eu/develop/api.html) *(free, no key)* | Italian institutional repositories, European open access |
+| Server | API | Target | Key required |
+|---|---|---|---|
+| 🎓 `eric` | [ERIC API](https://api.ies.ed.gov/eric/) | Education Resources Information Center — peer-reviewed ed research | No |
+| 🌍 `openaire` | [OpenAIRE Graph API](https://graph.openaire.eu/develop/api.html) | European open access + Italian institutional repositories (IRIS) | No |
+| 📦 `core` | [CORE API v3](https://api.core.ac.uk/docs/v3) | Full-text OA aggregator — strong Italian repository coverage | Free key |
+| 📰 `doaj` | [DOAJ API](https://doaj.org/api/docs) | Directory of Open Access Journals — filterable by publisher country | No |
+| 🗄️ `zenodo` | [Zenodo REST API](https://developers.zenodo.org/) | Preprints, datasets, publications — Italian Horizon Europe outputs | No |
 
 Additionally, the workflow uses these installable MCP servers:
 
@@ -102,13 +105,31 @@ Copy-Item -Recurse skills\* $env:USERPROFILE\.claude\skills\
 
 ### 3. Install MCP Servers
 ```bash
-# 1. Local custom servers (ERIC + OpenAIRE)
+# 1. Local custom servers (copy to Claude config)
 cp -r mcp-servers/eric ~/.claude/mcp-servers/
-cp -r mcp-servers/ricerca-italia ~/.claude/mcp-servers/
+cp -r mcp-servers/openaire ~/.claude/mcp-servers/
+cp -r mcp-servers/core ~/.claude/mcp-servers/
+cp -r mcp-servers/doaj ~/.claude/mcp-servers/
+cp -r mcp-servers/zenodo ~/.claude/mcp-servers/
 
-# Register them with Claude Code
+# Register with Claude Code
 claude mcp add eric python ~/.claude/mcp-servers/eric/server.py
-claude mcp add ricerca-italia python ~/.claude/mcp-servers/ricerca-italia/server.py
+claude mcp add openaire python ~/.claude/mcp-servers/openaire/server.py
+claude mcp add core python ~/.claude/mcp-servers/core/server.py
+claude mcp add doaj python ~/.claude/mcp-servers/doaj/server.py
+claude mcp add zenodo python ~/.claude/mcp-servers/zenodo/server.py
+
+
+# Optional: add CORE API key for full access (free at https://core.ac.uk/services/api)
+claude mcp add core python ~/.claude/mcp-servers/core/server.py \
+  -e CORE_API_KEY=your_key_here
+
+# Windows (PowerShell)
+Copy-Item -Recurse mcp-servers\eric $env:USERPROFILE\.claude\mcp-servers\
+Copy-Item -Recurse mcp-servers\openaire $env:USERPROFILE\.claude\mcp-servers\
+Copy-Item -Recurse mcp-servers\core $env:USERPROFILE\.claude\mcp-servers\
+Copy-Item -Recurse mcp-servers\doaj $env:USERPROFILE\.claude\mcp-servers\
+Copy-Item -Recurse mcp-servers\zenodo $env:USERPROFILE\.claude\mcp-servers\
 
 # 2. Install external MCP servers via pip
 pip install semantic-scholar-fastmcp mcp-simple-pubmed arxiv-mcp-server
@@ -172,3 +193,4 @@ The skill instructions are natively written in **Italian**, targeting Italian ac
 ## ⚖️ License
 
 **AGPL-3.0** — requires anyone who distributes or runs the software as a service to share the source code.
+
