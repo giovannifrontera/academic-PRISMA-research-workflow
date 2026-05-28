@@ -50,17 +50,19 @@ Ogni skill è invocata tramite il tool **`Skill`** di Claude Code (es. `Skill("p
 
 **Comandi minimi:**
 ```bash
+py hybrid_rag.py choose-backend --backend lancedb  # raccomandato; ometti per usare chromadb
 py hybrid_rag.py init
-py hybrid_rag.py choose-model --model e5-large   # per 30-150 paper
 py hybrid_rag.py index-prisma eligibility_prisma.json
 py hybrid_rag.py status
 ```
+
+> `choose-model` è opzionale: il default `minilm` va bene per < 30 paper. Per 30-150 paper usa `--model e5-large` prima di `init`.
 
 **File prodotti:**
 
 | File/Cartella | Contenuto | Consumato da |
 |---|---|---|
-| `rag_db/` | Database vettoriale locale (ChromaDB o Qdrant) | `prisma-review` Fase 6, `edtech-pilot-design` |
+| `rag_db/` | Database vettoriale locale (LanceDB, ChromaDB o Qdrant) | `prisma-review` Fase 6, `edtech-pilot-design` |
 | `rag_db/config.json` | Modello attivo, backend, indicizzazione | Ripresa di sessione |
 
 **Dipendenza:** `hybrid_rag.py` deve esistere nella cartella di lavoro. Se non esiste: leggi `~/.claude/skills/hybrid-rag/hybrid_rag_template.py` e scrivilo con Write tool.
@@ -101,7 +103,8 @@ py hybrid_rag.py status
 | Situazione | Da dove partire |
 |---|---|
 | Primo progetto, nessun file | `prisma-review` Fase 0 |
-| `prisma_state.json` esiste | `prisma-review` — legge fase_corrente e riprende |
+| `prisma_state.json` esiste e valido | `prisma-review` — legge fase_corrente e riprende |
+| `prisma_state.json` corrotto (JSON invalido) | Rinominalo in `prisma_state.json.bak`, avvisa l'utente, riparte da Fase 0 con i dati recuperabili da `prisma_log.md` |
 | `eligibility_prisma.json` pronto, RAG non ancora costruito | `hybrid-rag` direttamente |
 | `rag_db/` esiste, pilot non ancora avviato | `edtech-pilot-design` — rileva automaticamente `rag_db/` |
 | `protocollo_ricerca.md` esiste | `edtech-pilot-design` — legge Blocco STATO e riprende |

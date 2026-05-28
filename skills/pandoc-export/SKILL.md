@@ -1,6 +1,6 @@
 ---
 name: pandoc-export
-description: Use when the user wants to convert a Markdown file to Word (DOCX), especially after completing a PRISMA systematic review. Triggers on: "converti in Word", "esporta in docx", "pandoc", "salva come Word", output from prisma-review skill.
+description: Use when the user wants to convert a Markdown file to Word (DOCX), especially after completing a PRISMA systematic review or an edtech pilot study design. Triggers on: "converti in Word", "esporta in docx", "pandoc", "salva come Word", output from prisma-review or edtech-pilot-design skill.
 ---
 
 # Pandoc Export: Markdown → DOCX
@@ -61,10 +61,19 @@ pandoc "file.md" -o "file.docx" --reference-doc="template.docx" --toc --toc-dept
 > **Nota:** `-V geometry:margin=2.5cm` è un'opzione LaTeX — non funziona per DOCX. I margini si impostano nel template `.docx` di riferimento.
 
 ### Conversione batch (tutti i file edtech in una volta)
+
+**Bash / Git Bash:**
 ```bash
 for f in preprint_bozza.md protocollo_ricerca.md strumenti_valutazione.md timeline_pilota.md; do
   pandoc "$f" -o "${f%.md}.docx" --toc --toc-depth=3
 done
+```
+
+**PowerShell (Windows):**
+```powershell
+foreach ($f in @("preprint_bozza.md","protocollo_ricerca.md","strumenti_valutazione.md","timeline_pilota.md")) {
+  pandoc $f -o ($f -replace '\.md$', '.docx') --toc --toc-depth=3
+}
 ```
 
 ### Percorsi con spazi su Windows (usa sempre le virgolette)

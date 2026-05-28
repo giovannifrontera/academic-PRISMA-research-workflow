@@ -78,8 +78,7 @@ Dichiara esplicitamente all'utente: *"Contesto identificato: [contesto scelto]. 
 
 - **Sì, ho un file** → chiedi il percorso esatto e leggilo come descritto sopra (accetta qualsiasi nome)
 - **Sì, ma non ho il file** → chiedi di condividere verbalmente i risultati chiave (gap, framework, strumenti, effect size medi)
-- **No, ma ho tempo per una revisione** → suggerisci di invocare prima la skill `prisma-review`. Il pilot senza revisione sistematica rischia di replicare studi già esistenti o di scegliere strumenti non validati nel contesto.
-- **No, ma ho tempo per una revisione** → suggerisci di invocare prima la skill `prisma-review` tramite il tool **`Skill`** di Claude Code.
+- **No, ma ho tempo per una revisione** → suggerisci di invocare prima la skill `prisma-review` tramite il tool **`Skill`** di Claude Code. Il pilot senza revisione sistematica rischia di replicare studi già esistenti o di scegliere strumenti non validati nel contesto.
 - **No, e non ho tempo per una PRISMA completa** → proponi questa alternativa leggera: *"Possiamo fare una scoping review rapida: 2-3 query mirate su Semantic Scholar + ERIC per identificare i 5-10 studi più citati sul tuo tema, estrarre framework e strumenti dominanti, e usare d=0.5 come effect size conservativo per la power analysis. Ci vogliono circa 2 ore invece di settimane. Vuoi procedere così?"* Documenta nel protocollo che la revisione è una scoping review rapida (non una revisione sistematica PRISMA) e le implicazioni per la generalizzabilità.
 
 Poi presenta all'utente:
@@ -409,10 +408,10 @@ Dopo le risposte, dichiara esplicitamente: *"Produco un [tipo] in [lingua]. Iniz
 **6a/6b. Strutture IMRAD**
 
 Usa il tool **Read** sul file corrispondente al tipo scelto e usa quella struttura per generare `preprint_bozza.md`:
-- Protocol paper → Read `~/.claude/skills/edtech-pilot-design/imrad-protocol-paper.md`
-- Results paper → Read `~/.claude/skills/edtech-pilot-design/imrad-results-paper.md`
+- Protocol paper → tenta `Read ~/.claude/skills/edtech-pilot-design/imrad-protocol-paper.md`; se il tool restituisce errore (file non installato), usa il fallback inline sotto
+- Results paper → tenta `Read ~/.claude/skills/edtech-pilot-design/imrad-results-paper.md`; se il tool restituisce errore, usa il fallback inline sotto
 
-> **Fallback se i file non esistono:** usa direttamente la struttura qui sotto.
+> **Fallback se i file non esistono** (skill non installata o path diverso):
 >
 > **Protocol paper (fallback inline):** Abstract strutturato → 1. Introduction (gap + PRISMA + RQ) → 2. Methods (2.1 Design, 2.2 Participants, 2.3 Instruments, 2.4 Procedure, 2.5 Analysis Plan, 2.6 Ethics) → 3. Expected Outcomes → 4. Limitations → 5. References (APA 7).
 >
@@ -435,7 +434,7 @@ Per studi pilota il tipo più comune è il Protocol Paper.
 
 Consiglia di caricare su **OSF** se lo studio è pre-registrato lì (coerenza); su **EdArXiv** per massima visibilità nel campo educativo.
 
-**6d. Riviste target per la submission finale**
+**6e. Riviste target per la submission finale**
 
 Chiedi all'utente se intende sottomettere a una rivista e guidalo nella scelta:
 
@@ -452,7 +451,7 @@ Chiedi all'utente se intende sottomettere a una rivista e guidalo nella scelta:
 
 ---
 
-**6d. Checklist di qualità prima della pubblicazione**
+**6f. Checklist di qualità prima della pubblicazione**
 - [ ] Titolo include: design, popolazione, intervento, outcome
 - [ ] Abstract strutturato con tutte le sezioni
 - [ ] Framework teorico citato con riferimenti primari
