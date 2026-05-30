@@ -2,197 +2,66 @@
 
 # Academic PRISMA Research Workflow
 
-**A Claude Code toolkit for rigorous, reproducible academic research**
+### Rigorous Research Orchestration via Claude Code
 
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Claude Code](https://img.shields.io/badge/Powered_by-Claude_Code-purple.svg)](https://claude.ai/code)
+**Academic PRISMA Workflow** is an advanced toolkit that transforms Claude Code into a specialized research assistant for systematic reviews, pilot study design, and evidence synthesis.
+
+[Pipeline](#the-research-pipeline) · [Capabilities](#core-skills) · [MCP Servers](#academic-connectivity) · [Quick Start](#quick-start)
 
 </div>
 
-This workflow turns Claude Code into a structured academic research assistant. It covers the full pipeline — from PRISMA systematic literature reviews to pilot study design and preprint export — using a set of interconnected skills and custom MCP servers that connect Claude directly to academic databases.
-
 ---
 
-## Pipeline
+## The Research Pipeline
+
+This workflow automates the most labor-intensive stages of academic research while maintaining full methodological rigor:
 
 ```mermaid
 graph LR;
-    A[prisma-review] -->|eligibility_prisma.json| B[hybrid-rag];
-    B -->|rag_db/| C[edtech-pilot-design];
-    C -->|preprint_bozza.md| D[pandoc-export];
+    A[PRISMA Review] -->|evidence| B[Hybrid RAG];
+    B -->|synthesis| C[Pilot Design];
+    C -->|preprint| D[Academic Export];
 ```
 
-Each stage hands off structured files to the next, so you can resume mid-workflow across sessions without losing context.
+By using a **State-Handoff Pattern**, each stage generates structured JSON/Markdown files, allowing researchers to audit, verify, and resume work across multiple sessions.
 
 ---
 
-## Skills
+## Core Skills
 
-| Skill | What it does |
+| Skill | Description |
 |---|---|
-| `prisma-review` | Runs a 6-phase PRISMA systematic review: database search across 8 sources, deduplication, screening, eligibility, data extraction with quality scoring, and RAG-powered report generation. |
-| `hybrid-rag` | Builds a local hybrid retrieval database from your PRISMA metadata or PDFs. Combines dense vector search (sentence-transformers) with BM25 sparse retrieval and Reciprocal Rank Fusion for high-recall evidence retrieval. |
-| `edtech-pilot-design` | Designs a mixed-methods quasi-experimental pilot study. Covers theoretical framework, instruments, power analysis, ethics (GDPR/MIUR), OSF pre-registration, and IMRAD preprint drafting. Tailored for Italian Ed-Tech research contexts. |
-| `pipeline-ricerca` | Reference map of the full pipeline: file dependencies, handoff points between skills, and entry-point scenarios for resuming at any stage. |
-| `pandoc-export` | Converts any Markdown output (review report, pilot protocol, preprint) to Word (.docx) via pandoc. |
+| **PRISMA Review** | A 6-phase automation of the systematic review process, from database identification to quality assessment. |
+| **Hybrid RAG** | A local evidence-retrieval engine combining dense vector search and sparse BM25 retrieval for high-recall synthesis. |
+| **Pilot Design** | Generates quasi-experimental study protocols with theoretical grounding and ethical compliance (GDPR/MIUR). |
+| **Academic Export** | Orchestrates Pandoc to convert research outputs into publication-ready documents. |
 
 ---
 
-## MCP Servers
+## Academic Connectivity (MCP)
 
-Eight academic database servers give Claude direct search access during the PRISMA identification phase. Each is a separate server so result counts can be tracked per source, as required by PRISMA reporting.
+The system connects Claude directly to the global academic record via a suite of custom **Model Context Protocol (MCP)** servers:
 
-### Custom servers (included in this repo)
-
-| Server | Source | Coverage | API key |
-|---|---|---|---|
-| `eric` | [ERIC API](https://api.ies.ed.gov/eric/) | Education research, peer-reviewed | No |
-| `openaire` | [OpenAIRE Graph API](https://graph.openaire.eu/develop/api.html) | European open access + Italian institutional repositories (IRIS) | No |
-| `core` | [CORE API v3](https://api.core.ac.uk/docs/v3) | Full-text OA aggregator, strong Italian repository coverage | Free |
-| `doaj` | [DOAJ API](https://doaj.org/api/docs) | Open access journals, filterable by publisher country | No |
-| `zenodo` | [Zenodo REST API](https://developers.zenodo.org/) | Preprints, datasets, Horizon Europe outputs | No |
-
-### External servers (pip-installable)
-
-| Server | Install | API key |
-|---|---|---|
-| `semantic-scholar` | `pip install semantic-scholar-fastmcp` | Free — [get one here](https://www.semanticscholar.org/product/api) |
-| `pubmed` | `pip install mcp-simple-pubmed` | No |
-| `arxiv` | `pip install arxiv-mcp-server` | No |
+*   **ERIC & OpenAIRE:** Education and European open-access research.
+*   **CORE & DOAJ:** Full-text aggregators and open journals.
+*   **Zenodo:** Preprints and Horizon Europe datasets.
+*   **Semantic Scholar:** Citation-graph-based discovery.
 
 ---
 
-## Installation
+## Quick Start
 
-### Requirements
-
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
-- Python 3.10+
-- [Pandoc](https://pandoc.org/installing.html) (for Word export only)
-
-> **RAG dependencies** (`sentence-transformers`, `rank-bm25`, `pymupdf`, `chromadb`) are installed automatically the first time you run `hybrid-rag`. You do not need to install them manually.
-
-### 1. Install the skills
-
-**Linux / macOS**
-```bash
-cp -r skills/* ~/.claude/skills/
-```
-
-**Windows (PowerShell)**
+### 1. Install Skills
 ```powershell
 Copy-Item -Recurse skills\* $env:USERPROFILE\.claude\skills\
 ```
 
-### 2. Install the custom MCP servers
-
-**Linux / macOS**
+### 2. Configure MCP
 ```bash
-cp -r mcp-servers/eric mcp-servers/openaire mcp-servers/core mcp-servers/doaj mcp-servers/zenodo ~/.claude/mcp-servers/
-
-claude mcp add eric     python ~/.claude/mcp-servers/eric/server.py
-claude mcp add openaire python ~/.claude/mcp-servers/openaire/server.py
-claude mcp add doaj     python ~/.claude/mcp-servers/doaj/server.py
-claude mcp add zenodo   python ~/.claude/mcp-servers/zenodo/server.py
-
-# CORE requires a free API key — get one at https://core.ac.uk/services/api
-claude mcp add core python ~/.claude/mcp-servers/core/server.py \
-  -e CORE_API_KEY=your_key_here
-```
-
-**Windows (PowerShell)**
-```powershell
-$mcp = "$env:USERPROFILE\.claude\mcp-servers"
-Copy-Item -Recurse mcp-servers\eric, mcp-servers\openaire, mcp-servers\core, mcp-servers\doaj, mcp-servers\zenodo $mcp\
-
-$py = (Get-Command python).Source
-claude mcp add eric     $py "$mcp\eric\server.py"
-claude mcp add openaire $py "$mcp\openaire\server.py"
-claude mcp add doaj     $py "$mcp\doaj\server.py"
-claude mcp add zenodo   $py "$mcp\zenodo\server.py"
-
-# CORE requires a free API key — get one at https://core.ac.uk/services/api
-claude mcp add core $py "$mcp\core\server.py" -e CORE_API_KEY=your_key_here
-```
-
-### 3. Install the external MCP servers
-
-```bash
-pip install semantic-scholar-fastmcp mcp-simple-pubmed arxiv-mcp-server
-
-# semantic-scholar requires a free API key
-claude mcp add semantic-scholar semantic-scholar-fastmcp \
-  -e SEMANTIC_SCHOLAR_API_KEY=your_key_here \
-  -e SEMANTIC_SCHOLAR_ENABLE_HTTP_BRIDGE=0
-
-claude mcp add pubmed mcp-simple-pubmed
-claude mcp add arxiv  arxiv-mcp-server
-```
-
-### 4. Verify
-
-```bash
-claude mcp list
-# All servers should show ✓ Connected
+claude mcp add eric python server.py
+# (see README-mcp.md for full configuration)
 ```
 
 ---
 
-## How the RAG system works
-
-The `hybrid-rag` skill uses a **generated script** pattern rather than a pre-installed package:
-
-1. The first time you invoke `hybrid-rag`, Claude writes `hybrid_rag.py` into your project folder by copying it from the installed skill template.
-2. You then run `py hybrid_rag.py init`, which installs the required Python packages and creates a `rag_db/` directory in your project folder.
-3. The **first indexing run** downloads an embedding model from HuggingFace (see table below). This is a one-time download cached in `~/.cache/huggingface/`.
-4. Subsequent commands (`index-prisma`, `query`, etc.) operate on that local database.
-
-The `rag_db/` directory is **local to each project** — it is never committed to version control and does not exist until you run `init`. Each research project gets its own database built from its own PRISMA results.
-
-### Embedding models
-
-| Key | Model | Size | Speed | Best for |
-|---|---|---|---|---|
-| `minilm` *(default)* | `paraphrase-multilingual-MiniLM-L12-v2` | 400 MB | Fast | < 30 papers |
-| `e5-large` | `intfloat/multilingual-e5-large` | 1.2 GB | Medium | 30–150 papers |
-| `bge-m3` | `BAAI/bge-m3` | 2.3 GB | Slow | > 150 papers |
-
-All models support Italian and English. The default (`minilm`) is used unless you explicitly run `py hybrid_rag.py choose-model --model e5-large` before indexing. Changing the model after indexing requires rebuilding the database.
-
----
-
-## Usage
-
-Start any skill by describing your task in Claude Code:
-
-```
-Start a PRISMA systematic review on chatbot use in secondary education
-```
-
-```
-Build a RAG database from my eligibility_prisma.json
-```
-
-```
-Design a pilot study based on my PRISMA synthesis
-```
-
-```
-Export report_finale.md to Word
-```
-
-The `pipeline-ricerca` skill acts as a map if you need to resume mid-workflow or understand which files connect which stages.
-
----
-
-## Notes
-
-- Skill instructions are written in **Italian**, as the workflow targets Italian academic researchers (Ed-Tech, Scienze della Formazione). The MCP tools and RAG system handle both Italian and English documents.
-- The `edtech-pilot-design` skill includes Italian-specific content: MIUR/INVALSI compliance, Italian validated instruments, and OSF pre-registration guidance.
-
----
-
-## License
-
-[AGPL-3.0](LICENSE) — anyone who distributes or runs this software as a service must publish the source code.
+*Part of the **[AI-Wiki Ecosystem](https://github.com/giovannifrontera/giovannifrontera)** · Developed by Giovanni Frontera, Ph.D.*
