@@ -1,6 +1,6 @@
 ---
 name: pipeline-ricerca
-description: Use when starting a new academic research project, switching between skills mid-workflow, or needing to know which files connect prisma-review, hybrid-rag, edtech-pilot-design and pandoc-export. Reference for the complete PRISMA → RAG → Pilot → Preprint pipeline.
+description: Use when starting a new academic research project, switching between skills mid-workflow, or needing to know which files connect prisma-review, hybrid-rag, educational-pilot-design and pandoc-export. Reference for the complete PRISMA → RAG → Pilot → Preprint pipeline.
 ---
 
 # Pipeline di Ricerca Accademica
@@ -12,7 +12,7 @@ description: Use when starting a new academic research project, switching betwee
        ↓
 [hybrid-rag]             → rag_db/
        ↓
-[edtech-pilot-design]    → protocollo_ricerca.md + preprint_bozza.md
+[educational-pilot-design]    → protocollo_ricerca.md + preprint_bozza.md
        ↓
 [pandoc-export]          → preprint_bozza.docx
 ```
@@ -35,7 +35,7 @@ Ogni skill è invocata tramite il tool **`Skill`** di Claude Code (es. `Skill("p
 | `prisma_log.md` | Log metodologico ufficiale per il paper | — |
 | `screening_prisma.json` | Paper dopo deduplicazione (con abstract) | `hybrid-rag` (fallback) |
 | `eligibility_prisma.json` / `extraction_table.json` | Paper inclusi con dati estratti completi | `hybrid-rag` (primario) |
-| `prisma_synthesis.md` | Sintesi tematica + **sezione OUTPUT PER PILOT STUDY** | `edtech-pilot-design` |
+| `prisma_synthesis.md` | Sintesi tematica + **sezione OUTPUT PER PILOT STUDY** | `educational-pilot-design` |
 | `prisma_bibliography.md` | Schede bibliografiche annotate | Report finale |
 
 **File critico per il passaggio al Pilot:** `prisma_synthesis.md` — sezione **OUTPUT PER PILOT STUDY** (effect size aggregati, framework dominante, strumenti, RQ aperte, gap di popolazione, durata tipica interventi). Deve essere compilata durante la Fase 4, non solo alla fine.
@@ -62,16 +62,16 @@ py hybrid_rag.py status
 
 | File/Cartella | Contenuto | Consumato da |
 |---|---|---|
-| `rag_db/` | Database vettoriale locale (LanceDB, ChromaDB o Qdrant) | `prisma-review` Fase 6, `edtech-pilot-design` |
+| `rag_db/` | Database vettoriale locale (LanceDB, ChromaDB o Qdrant) | `prisma-review` Fase 6, `educational-pilot-design` |
 | `rag_db/config.json` | Modello attivo, backend, indicizzazione | Ripresa di sessione |
 
 **Dipendenza:** `hybrid_rag.py` deve esistere nella cartella di lavoro. Se non esiste: leggi `~/.claude/skills/hybrid-rag/hybrid_rag_template.py` e scrivilo con Write tool.
 
 ---
 
-## Stage 3 — `edtech-pilot-design`
+## Stage 3 — `educational-pilot-design`
 
-**Quando:** dopo `prisma-review` (e opzionalmente `hybrid-rag`), per progettare lo studio pilota.
+**Quando:** dopo `prisma-review` (e opzionalmente `hybrid-rag`), per progettare lo studio pilota. Copre tutti i livelli scolastici (infanzia, primaria, secondaria I e II, università, formazione professionale) e tutti i profili disciplinari delle scienze dell'educazione (Ed-Tech, psicopedagogia, pedagogia speciale, didattica, valutazione, formazione docenti).
 
 **Input richiesti:**
 - `prisma_synthesis.md` (sezione OUTPUT PER PILOT STUDY) — pre-compila automaticamente framework, effect size, strumenti, RQ
@@ -81,7 +81,7 @@ py hybrid_rag.py status
 
 | File | Contenuto | Consumato da |
 |---|---|---|
-| `protocollo_ricerca.md` | Protocollo completo (Blocco STATO + 10 sezioni) | `pandoc-export` (opzionale) |
+| `protocollo_ricerca.md` | Protocollo completo (Blocco STATO + sezioni) | `pandoc-export` (opzionale) |
 | `strumenti_valutazione.md` | Questionari, tracce intervista, LA | — |
 | `timeline_pilota.md` | Cronoprogramma settimanale | — |
 | `preprint_bozza.md` | Paper IMRAD (Protocol o Results) | `pandoc-export` |
@@ -90,7 +90,7 @@ py hybrid_rag.py status
 
 ## Stage 4 — `pandoc-export`
 
-**Quando:** al termine di `prisma-review` (report finale) o `edtech-pilot-design` (preprint).
+**Quando:** al termine di `prisma-review` (report finale) o `educational-pilot-design` (preprint).
 
 **Input richiesti:** qualsiasi file `.md` da convertire.
 
@@ -106,18 +106,18 @@ py hybrid_rag.py status
 | `prisma_state.json` esiste e valido | `prisma-review` — legge fase_corrente e riprende |
 | `prisma_state.json` corrotto (JSON invalido) | Rinominalo in `prisma_state.json.bak`, avvisa l'utente, riparte da Fase 0 con i dati recuperabili da `prisma_log.md` |
 | `eligibility_prisma.json` pronto, RAG non ancora costruito | `hybrid-rag` direttamente |
-| `rag_db/` esiste, pilot non ancora avviato | `edtech-pilot-design` — rileva automaticamente `rag_db/` |
-| `protocollo_ricerca.md` esiste | `edtech-pilot-design` — legge Blocco STATO e riprende |
-| Dati già raccolti | `edtech-pilot-design` Fase 5 (Results Paper) |
+| `rag_db/` esiste, pilot non ancora avviato | `educational-pilot-design` — rileva automaticamente `rag_db/` |
+| `protocollo_ricerca.md` esiste | `educational-pilot-design` — legge Blocco STATO e riprende |
+| Dati già raccolti | `educational-pilot-design` Fase 5 (Results Paper) |
 | Solo export Word | `pandoc-export` direttamente |
 
 ---
 
-## Handoff critico: prisma-review → edtech-pilot-design
+## Handoff critico: prisma-review → educational-pilot-design
 
-La sezione **OUTPUT PER PILOT STUDY** di `prisma_synthesis.md` è l'unico meccanismo di trasferimento dati strutturato tra le due skill. Se questa sezione è vuota, `edtech-pilot-design` dovrà raccogliere manualmente tutte le informazioni bibliografiche.
+La sezione **OUTPUT PER PILOT STUDY** di `prisma_synthesis.md` è l'unico meccanismo di trasferimento dati strutturato tra le due skill. Se questa sezione è vuota, `educational-pilot-design` dovrà raccogliere manualmente tutte le informazioni bibliografiche.
 
-Campi da compilare in `prisma_synthesis.md` prima di avviare `edtech-pilot-design`:
+Campi da compilare in `prisma_synthesis.md` prima di avviare `educational-pilot-design`:
 
 ```markdown
 ### Effect size aggregati
