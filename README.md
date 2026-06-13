@@ -1,4 +1,8 @@
-﻿<div align="center">
+> Warning: Superseded -- This repo has been superseded by academic-research-prisma-wiki-rag (https://github.com/giovannifrontera/academic-research-prisma-wiki-rag), which extends this PRISMA workflow with a persistent LanceDB knowledge layer. All skills here are included in the extended version. This repository is archived for reference.
+
+---
+
+<div align="center">
 
 # 🔬 academic-PRISMA-research-workflow
 
